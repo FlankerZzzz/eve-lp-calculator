@@ -79,6 +79,7 @@ async function scheduleDueJobs() {
 }
 
 async function nextRunningJob() {
+  await scheduleDueJobs();
   const data = await readStatus();
   const running = data.jobs?.filter(job => job.status === "running") || [];
   if (running.some(job => job.kind === "orders")) return null;
