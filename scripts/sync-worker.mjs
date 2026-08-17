@@ -7,6 +7,7 @@ const lockPort = 33991;
 const transientFailures = new Map();
 let roundRobinIndex = 0;
 let lastRankingDueCheck = 0;
+let lastScheduleKey = "";
 
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 
@@ -50,6 +51,31 @@ async function readStatus() {
   const response = await fetch(`${baseUrl}/api/sync/status`, { cache: "no-store" });
   if (!response.ok) throw new Error(`状态接口 HTTP ${response.status}`);
   return response.json();
+}
+
+async function scheduleDueJobs() {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date()).filter(part => part.type === "hour" || part.type === "minute").map(part => [part.type, Number(part.value)]));
+  const hour = parts.hour;
+  const minute = parts.minute;
+  const key = `${new Date().toISOString().slice(0, 10)}-${hour}:${minute}`;
+  if (key === lastScheduleKey) return false;
+  const orderHours = new Set([0, 3, 9, 12, 15, 18, 21]);
+  const isOrderDue = minute === 0 && orderHours.has(hour);
+  const isHistoryDue = hour === 0 && minute === 30;
+  if (!isOrderDue && !isHistoryDue) return false;
+  const kind = isHistoryDue ? "history" : "orders";
+  const response = await fetch(`${baseUrl}/api/sync/control`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ kind, action: "restart" }),
+  });
+  if (response.ok || response.status === 409) {
+    lastScheduleKey = key;
+    console.log(`[sync-worker] 定时启动 ${kind}：Asia/Shanghai ${hour}:${String(minute).padStart(2, "0")}`);
+    return true;
+  }
+  return false;
 }
 
 async function nextRunningJob() {
