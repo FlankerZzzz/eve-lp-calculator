@@ -1,0 +1,61 @@
+services:
+  web:
+    image: eve-lp-calculator-eve-lp-calculator
+    build: .
+    container_name: eve-lp-web
+    restart: unless-stopped
+    command: ["node", "scripts/web.mjs"]
+    ports:
+      - "3000:3000"
+    environment:
+      ESI_BASE_URL: https://ali-esi.evepc.163.com
+      SQLITE_RUNTIME: "1"
+      SQLITE_PATH: /data/eve-lp.db
+      WRANGLER_WRITE_LOGS: "false"
+      WRANGLER_LOG_PATH: /app/.wrangler/logs
+      MINIFLARE_REGISTRY_PATH: /app/.wrangler/registry
+    volumes:
+      - ./docker-data/wrangler:/app/.wrangler
+      - ./docker-data/sqlite:/data
+
+  sync-worker:
+    image: eve-lp-calculator-eve-lp-calculator
+    build: .
+    container_name: eve-lp-sync-worker
+    restart: unless-stopped
+    command: ["node", "scripts/sync-worker.mjs"]
+    environment:
+      SYNC_BASE_URL: http://sync-api:3001
+      SQLITE_RUNTIME: "1"
+      SQLITE_PATH: /data/eve-lp.db
+      ESI_BASE_URL: https://ali-esi.evepc.163.com
+    volumes:
+      - ./docker-data/sqlite:/data
+    depends_on:
+      - sync-api
+
+  order-sync:
+    image: eve-lp-calculator-eve-lp-calculator
+    build: .
+    container_name: eve-lp-order-sync
+    restart: unless-stopped
+    command: ["node", "scripts/order-sync-daemon.mjs"]
+    environment:
+      SQLITE_PATH: /data/eve-lp.db
+      ESI_BASE_URL: https://ali-esi.evepc.163.com
+    volumes:
+      - ./docker-data/sqlite:/data
+
+  sync-api:
+    image: eve-lp-calculator-eve-lp-calculator
+    build: .
+    container_name: eve-lp-sync-api
+    restart: unless-stopped
+    command: ["node", "scripts/web.mjs"]
+    environment:
+      PORT: "3001"
+      SQLITE_RUNTIME: "1"
+      SQLITE_PATH: /data/eve-lp.db
+      ESI_BASE_URL: https://ali-esi.evepc.163.com
+    volumes:
+      - ./docker-data/sqlite:/data

@@ -1,0 +1,11 @@
+node_modules
+.git
+.wrangler
+.vinext
+dist
+docker-data
+outputs
+work
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
