@@ -26,3 +26,5 @@
 .implant-levels>div{grid-template-columns:34px minmax(180px,1fr) 160px 110px 92px}.implant-total>div>span,.implant-total-lp span{color:var(--muted);font-size:13px}.implant-total>div>strong,.implant-total-lp strong{font:28px Georgia;font-weight:400}.implant-total-lp{margin-left:28px}.implant-total-lp strong{color:var(--text)}@media(max-width:600px){.implant-levels>div{grid-template-columns:28px minmax(110px,1fr) 110px 86px 80px}.implant-total>div>strong,.implant-total-lp strong{font-size:22px}}
 
 .implant-total strong small{display:block;color:var(--muted);font:12px Arial,sans-serif;margin-top:3px;text-align:right}.implant-total>div>strong,.implant-total-lp strong{line-height:1.05}
+
+.implant-total-ratio{margin-right:8px}.implant-total-ratio strong{color:var(--mint)!important;font-size:28px!important}.implant-total-ratio small{white-space:nowrap}
