@@ -11,7 +11,7 @@ type OfferRow = {
   exchange_signature?: string; manufacturing_signature?: string;
 };
 type MaterialRow = { corporation_id: number; offer_id: number; type_id: number; quantity: number; item_name: string; buy_price: number; sell_price: number; material_kind: string };
-type ImplantSetRow = { type_id: number; name_en: string; name_zh: string | null; sell_price: number; lp_cost: number };
+type ImplantSetRow = { type_id: number; name_en: string; name_zh: string | null; buy_price: number; sell_price: number; lp_cost: number };
 const finiteNumber = (value: string | null, fallback: number) => value === null || value.trim() === "" ? fallback : Number(value);
 
 export async function GET(request: Request) {
@@ -123,7 +123,7 @@ export async function GET(request: Request) {
     const sortColumn = sortColumns[sortKey] || "lp_ratio";
     const offers = (await db.prepare(`SELECT * FROM (${baseSql}) ranked ORDER BY ${sortColumn} ${sortDirection} NULLS LAST, item_name, offer_id LIMIT ? OFFSET ?`).bind(...bindings, pageSize, (page - 1) * pageSize).all<OfferRow>()).results;
     const materials = await loadMaterials(offers);
-    const implantRows = (await db.prepare(`SELECT t.type_id, COALESCE(t.name_en, '') name_en, t.name_zh, o.lp_cost, COALESCE(mo.sell_price, 0) sell_price FROM lp_offers o JOIN item_types t ON t.type_id=o.type_id LEFT JOIN market_orders mo ON mo.region_id=? AND mo.type_id=t.type_id WHERE o.corporation_id=? AND (t.name_en LIKE '% Alpha' OR t.name_en LIKE '% Beta' OR t.name_en LIKE '% Gamma' OR t.name_en LIKE '% Delta' OR t.name_en LIKE '% Epsilon' OR t.name_en LIKE '% Omega')`).bind(MARKET_REGION_ID, corporationId).all<ImplantSetRow>()).results;
+    const implantRows = (await db.prepare(`SELECT t.type_id, COALESCE(t.name_en, '') name_en, t.name_zh, o.lp_cost, COALESCE(mo.buy_price, 0) buy_price, COALESCE(mo.sell_price, 0) sell_price FROM lp_offers o JOIN item_types t ON t.type_id=o.type_id LEFT JOIN market_orders mo ON mo.region_id=? AND mo.type_id=t.type_id WHERE o.corporation_id=? AND (t.name_en LIKE '% Alpha' OR t.name_en LIKE '% Beta' OR t.name_en LIKE '% Gamma' OR t.name_en LIKE '% Delta' OR t.name_en LIKE '% Epsilon' OR t.name_en LIKE '% Omega')`).bind(MARKET_REGION_ID, corporationId).all<ImplantSetRow>()).results;
     const levels = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Omega"];
     const grouped = new Map<string, Map<string, ImplantSetRow>>();
     for (const row of implantRows) {
@@ -138,7 +138,7 @@ export async function GET(request: Request) {
       const items = levels.map(level => set.get(level)!);
       const chineseName = items[0].name_zh?.replace(/[—-]?(?:阿尔法|贝它|伽玛|德尔塔|伊普西隆|欧米伽)型$/, "").replace(/[—\-\s]+$/, "");
       const totalLp = items.reduce((sum, item) => sum + item.lp_cost, 0);
-      const marketValue = items.every(item => item.sell_price > 0) ? items.reduce((sum, item) => sum + item.sell_price, 0) : null;
+      const marketValue = items.every(item => item.buy_price > 0) ? items.reduce((sum, item) => sum + item.buy_price, 0) : null;
       return { name: chineseName || name, item_count: 6, total_lp: totalLp, lp_ratio: marketValue !== null && totalLp > 0 ? marketValue / totalLp : null, priced_count: items.filter(item => item.sell_price > 0).length, market_value: marketValue, items: items.map((item, index) => ({ level: levels[index], type_id: item.type_id, name: item.name_zh || item.name_en, lp_cost: item.lp_cost, sell_price: item.sell_price })) };
     });
     return Response.json({ view: "detail", offers: hydrate(offers, materials), total, page, pageSize: requestedSize === "all" ? "all" : pageSize, pages: requestedSize === "all" ? 1 : Math.max(1, Math.ceil(total / pageSize)), days, implant_sets: implantSets });
