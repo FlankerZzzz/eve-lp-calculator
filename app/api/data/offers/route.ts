@@ -137,7 +137,9 @@ export async function GET(request: Request) {
     const implantSets = [...grouped.entries()].filter(([, set]) => set.size === 6).map(([name, set]) => {
       const items = levels.map(level => set.get(level)!);
       const chineseName = items[0].name_zh?.replace(/[—-]?(?:阿尔法|贝它|伽玛|德尔塔|伊普西隆|欧米伽)型$/, "").replace(/[—\-\s]+$/, "");
-      return { name: chineseName || name, item_count: 6, total_lp: items.reduce((sum, item) => sum + item.lp_cost, 0), priced_count: items.filter(item => item.sell_price > 0).length, market_value: items.every(item => item.sell_price > 0) ? items.reduce((sum, item) => sum + item.sell_price, 0) : null, items: items.map((item, index) => ({ level: levels[index], type_id: item.type_id, name: item.name_zh || item.name_en, lp_cost: item.lp_cost, sell_price: item.sell_price })) };
+      const totalLp = items.reduce((sum, item) => sum + item.lp_cost, 0);
+      const marketValue = items.every(item => item.sell_price > 0) ? items.reduce((sum, item) => sum + item.sell_price, 0) : null;
+      return { name: chineseName || name, item_count: 6, total_lp: totalLp, lp_ratio: marketValue !== null && totalLp > 0 ? marketValue / totalLp : null, priced_count: items.filter(item => item.sell_price > 0).length, market_value: marketValue, items: items.map((item, index) => ({ level: levels[index], type_id: item.type_id, name: item.name_zh || item.name_en, lp_cost: item.lp_cost, sell_price: item.sell_price })) };
     });
     return Response.json({ view: "detail", offers: hydrate(offers, materials), total, page, pageSize: requestedSize === "all" ? "all" : pageSize, pages: requestedSize === "all" ? 1 : Math.max(1, Math.ceil(total / pageSize)), days, implant_sets: implantSets });
   }
