@@ -46,11 +46,16 @@
   .filters>input,.filters>select,.filters>.corporation-picker{width:100%;max-width:none;min-width:0}
   .filters input,.filters select,.filters button{min-height:44px;font-size:13px}
   .picker-trigger{min-height:46px}
-  .picker-menu{inset:max(10px,env(safe-area-inset-top)) 10px max(10px,env(safe-area-inset-bottom));width:auto;height:auto;display:flex;flex-direction:column;border-color:#51616b;box-shadow:0 0 0 100vmax #030608d9;clip-path:inset(-100vmax)}
-  .picker-search{flex:0 0 auto;padding:10px}.picker-columns{display:grid;grid-template-columns:1fr;height:auto;max-height:none;min-height:0;flex:1}
-  .faction-list,.corporation-list{height:auto;min-height:0;padding:6px}.faction-list{border-right:0;border-bottom:1px solid #303840;max-height:34vh}.corporation-list{max-height:42vh}
-  .filters .faction-list button,.filters .corporation-list button{min-height:48px;padding:7px 9px;font-size:14px}
-  .entity-icon{width:36px;height:36px;flex-basis:36px}
+  .picker-menu{inset:max(10px,env(safe-area-inset-top)) 10px max(10px,env(safe-area-inset-bottom));width:auto;height:auto;display:flex;flex-direction:column;overflow:hidden;border:1px solid #3b5159;border-radius:18px;background:linear-gradient(180deg,#171e24 0%,#10161b 100%);box-shadow:0 24px 70px #000,0 0 0 100vmax #030608d9;clip-path:inset(-100vmax round 18px)}
+  .picker-search{flex:0 0 auto;gap:8px;padding:12px;background:#151c22;border-bottom:1px solid #2a3940}.filters .picker-search input{border-radius:10px;background:#0d1318;border-color:#34464e;padding-left:14px}.filters .picker-search button{min-width:70px;border-radius:10px;background:#163027;border-color:#39715f;font-weight:600}
+  .picker-columns{display:grid;grid-template-columns:1fr;grid-template-rows:minmax(180px,34vh) minmax(0,1fr);height:auto;max-height:none;min-height:0;flex:1;background:#0c1115}
+  .faction-list,.corporation-list{position:relative;height:auto;min-height:0;max-height:none;padding:0 8px 10px;background:#11181d;scroll-padding-top:42px}.faction-list{border-right:0;border-bottom:1px solid #35444b}.corporation-list{background:#0e1419}
+  .faction-list::before,.corporation-list::before{position:sticky;top:0;z-index:2;display:block;padding:10px 8px 8px;background:linear-gradient(180deg,#11181d 75%,#11181ddd);color:#7f919c;font:10px/1.2 monospace;letter-spacing:.18em}
+  .faction-list::before{content:"选择势力"}.corporation-list::before{content:"选择企业";background:linear-gradient(180deg,#0e1419 75%,#0e1419dd)}
+  .filters .faction-list button,.filters .corporation-list button{position:relative;min-height:50px;margin:2px 0;padding:6px 10px;border-radius:10px;font-size:14px;transition:background-color .16s ease,color .16s ease,transform .16s ease}
+  .filters .faction-list button:hover,.filters .corporation-list button:hover{background:#1b252b}.filters .faction-list button.active{background:linear-gradient(90deg,#173129,#182229);box-shadow:inset 3px 0 0 var(--mint);color:var(--mint)}.filters .corporation-list button.selected{background:#17252a;box-shadow:inset 3px 0 0 #4aabff}
+  .filters .faction-list button small,.filters .corporation-list button small{padding:3px 7px;border-radius:999px;background:#202b31;color:#91a0a9}.filters .faction-list button span{color:#71818a;font-size:18px;margin-left:6px}
+  .entity-icon{width:38px;height:38px;flex-basis:38px;border-radius:9px;background:#090e12;box-shadow:0 0 0 1px #ffffff0a}
   .ranking-head{margin:28px 0 12px}.ranking-head h2{font-size:21px}
   .table{display:block;width:100%}
   .table-scroll,.offer-group,.mobile-offer-card{width:100%}
