@@ -42,15 +42,23 @@ test("组合计算的全量材料查询按小批次执行", async () => {
   assert.match(route, /pageSize = requestedSize === "all"/);
 });
 
-test("组合计算显示保守口径的总体价值和 LP 比例", async () => {
+test("组合计算只显示扣除成本后的保守利润和 LP 比例", async () => {
   const page = await source("app/page.tsx");
   assert.match(page, /unitPrice = material\.sell_price/);
   assert.match(page, /minProfit = offer\.buy_price > 0/);
-  assert.match(page, /totalValue = lines\.reduce\(\(sum, line\) => sum \+ line\.offer\.buy_price \* line\.offer\.revenue_quantity \* line\.count/);
   assert.match(page, /lpRatio = usedLp > 0 \? totalProfit \/ usedLp : 0/);
-  assert.match(page, /总体价值（收单）/);
   assert.match(page, /总体 LP 比例/);
   assert.match(page, /税后净利润 ÷ 已使用 LP/);
+  assert.doesNotMatch(page, /总体价值（收单）|totalValue/);
+});
+
+test("没有独立徽标的古力突击队回退到古斯塔斯势力徽标", async () => {
+  const [page, route] = await Promise.all([source("app/page.tsx"), source("app/api/data/entity-icon/route.ts")]);
+  assert.match(page, /NPC_CORPORATION_FACTION_FALLBACKS = new Map\(\[\[1000437, 500010\]\]\)/);
+  assert.match(page, /fallback_faction_id/);
+  assert.match(route, /INTERNATIONAL_DEFAULT_LOGO_HASHES/);
+  assert.match(route, /network-faction-fallback/);
+  assert.match(route, /corporations\/\$\{fallbackFactionId\}\/logo/);
 });
 
 test("历史同步跳过不可交易和不存在的物品", async () => {
