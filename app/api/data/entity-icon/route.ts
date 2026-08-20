@@ -5,6 +5,7 @@ import { join } from "node:path";
 const CACHE_ROOT = process.env.ENTITY_ICON_CACHE_PATH || "/data/entity-icons";
 const SERENITY_IMAGE_BASE = process.env.SERENITY_IMAGE_BASE_URL || "https://image.evepc.163.com";
 const IMAGE_BASE = process.env.EVE_IMAGE_BASE_URL || "https://images.evetech.net";
+const CACHE_VERSION = "v2";
 const ALLOWED_SIZES = new Set([32, 64, 128, 256, 512, 1024]);
 
 type CacheRef = { hash: string; contentType: string };
@@ -31,7 +32,7 @@ export async function GET(request: Request) {
 
   const refsDir = join(CACHE_ROOT, "refs");
   const blobsDir = join(CACHE_ROOT, "blobs");
-  const refPath = join(refsDir, `${kind}-${entityId}-${size}.json`);
+  const refPath = join(refsDir, `${CACHE_VERSION}-${kind}-${entityId}-${size}.json`);
   try {
     const ref = JSON.parse(await readFile(refPath, "utf8")) as CacheRef;
     const cached = await readFile(join(blobsDir, ref.hash));
@@ -55,12 +56,23 @@ export async function GET(request: Request) {
 
   try {
     let fetched: { body: Buffer; contentType: string };
-    let networkSource = "network-cn";
-    try {
-      fetched = await requestImage(`${SERENITY_IMAGE_BASE.replace(/\/$/, "")}/Corporation/${entityId}_${size}.png`);
-    } catch {
+    let networkSource: string;
+    if (kind === "faction") {
       networkSource = "network-intl";
-      fetched = await requestImage(`${IMAGE_BASE.replace(/\/$/, "")}/corporations/${entityId}/logo?size=${size}`);
+      try {
+        fetched = await requestImage(`${IMAGE_BASE.replace(/\/$/, "")}/corporations/${entityId}/logo?size=${size}`);
+      } catch {
+        networkSource = "network-cn";
+        fetched = await requestImage(`${SERENITY_IMAGE_BASE.replace(/\/$/, "")}/Corporation/${entityId}_${size}.png`);
+      }
+    } else {
+      networkSource = "network-cn";
+      try {
+        fetched = await requestImage(`${SERENITY_IMAGE_BASE.replace(/\/$/, "")}/Corporation/${entityId}_${size}.png`);
+      } catch {
+        networkSource = "network-intl";
+        fetched = await requestImage(`${IMAGE_BASE.replace(/\/$/, "")}/corporations/${entityId}/logo?size=${size}`);
+      }
     }
 
     const { body, contentType } = fetched;

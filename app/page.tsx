@@ -29,7 +29,7 @@ function ItemIcon({ typeId, name, size = 32, className = "" }: { typeId: number;
 }
 
 function EntityIcon({ id, name, kind }: { id: number; name: string; kind: "faction" | "corporation" }) {
-  return <img className="entity-icon" src={`/api/data/entity-icon?kind=${kind}&id=${id}&size=32`} width={32} height={32} loading="lazy" decoding="async" alt={`${name}徽标`} />;
+  return <img className="entity-icon" src={`/api/data/entity-icon?kind=${kind}&id=${id}&size=64`} width={32} height={32} loading="lazy" decoding="async" alt={`${name}徽标`} />;
 }
 
 export default function Home() {
