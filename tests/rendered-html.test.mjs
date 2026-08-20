@@ -23,6 +23,18 @@ test("首页只读取每日固定榜单快照", async () => {
   assert.doesNotMatch(route, /ORDER BY daily_volume DESC, lp_ratio DESC LIMIT 5/);
 });
 
+test("首页两个榜单使用独立且可切换的排序状态", async () => {
+  const page = await source("app/page.tsx");
+  assert.match(page, /setPopularSort.*key: "volume", direction: "desc"/);
+  assert.match(page, /setRatioSort.*key: "lpRatio", direction: "desc"/);
+  assert.match(page, /sortCalculatedOffers\(popularCalculated, popularSort\)/);
+  assert.match(page, /sortCalculatedOffers\(ratioCalculated, ratioSort\)/);
+  assert.match(page, /toggleTableSort\(setPopularSort, key\)/);
+  assert.match(page, /toggleTableSort\(setRatioSort, key\)/);
+  assert.match(page, /if \(left === null\) return 1/);
+  assert.doesNotMatch(page, /sortedPopular.*b\.volume - a\.volume/);
+});
+
 test("组合计算的全量材料查询按小批次执行", async () => {
   const route = await source("app/api/data/offers/route.ts");
   assert.match(route, /index \+= 20/);
@@ -37,10 +49,11 @@ test("历史同步跳过不可交易和不存在的物品", async () => {
   assert.match(esi, /type not found/i);
 });
 
-test("历史同步使用较保守的 50 并发和 1 秒间隔", async () => {
+test("历史同步每轮最多 50 条、使用 30 并发和 1 秒间隔", async () => {
   const [history, worker] = await Promise.all([source("app/api/sync/history/route.ts"), source("scripts/sync-worker.mjs")]);
   assert.match(history, /LIMIT 50/);
-  assert.match(history, /concurrency: 50/);
+  assert.match(history, /const HISTORY_CONCURRENCY = 30/);
+  assert.match(history, /concurrency: HISTORY_CONCURRENCY/);
   assert.match(worker, /job\.kind === "history" \? 1000/);
 });
 
