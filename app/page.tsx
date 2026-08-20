@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type SortKey = "lp_cost" | "isk_cost" | "materialCost" | "sell_price" | "buy_price" | "maxProfit" | "minProfit" | "lpRatio" | "volume";
 type SortDirection = "asc" | "desc";
+type TableSort = { key: SortKey; direction: SortDirection };
 
 type FactionOption = { faction_id: number; name: string };
 type CorporationOption = { corporation_id: number; faction_id: number | null; name: string; offer_count: number };
@@ -32,6 +33,19 @@ function EntityIcon({ id, name, kind }: { id: number; name: string; kind: "facti
   return <img className="entity-icon" src={`/api/data/entity-icon?kind=${kind}&id=${id}&size=64`} width={32} height={32} loading="lazy" decoding="async" alt={`${name}徽标`} />;
 }
 
+function sortCalculatedOffers(source: CalculatedOffer[], sort: TableSort) {
+  return [...source].sort((a, b) => {
+    const left = a[sort.key];
+    const right = b[sort.key];
+    if (left === null && right === null) return a.item_name.localeCompare(b.item_name, "zh-CN");
+    if (left === null) return 1;
+    if (right === null) return -1;
+    const difference = left - right;
+    if (difference === 0) return a.item_name.localeCompare(b.item_name, "zh-CN");
+    return sort.direction === "asc" ? difference : -difference;
+  });
+}
+
 export default function Home() {
   const [lp, setLp] = useState(100000);
   const [tax, setTax] = useState(3);
@@ -57,6 +71,8 @@ export default function Home() {
   const [status, setStatus] = useState("正在读取本地数据库…");
   const [sortKey, setSortKey] = useState<SortKey>("lpRatio");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [popularSort, setPopularSort] = useState<TableSort>({ key: "volume", direction: "desc" });
+  const [ratioSort, setRatioSort] = useState<TableSort>({ key: "lpRatio", direction: "desc" });
   const [expandedOffers, setExpandedOffers] = useState<Set<string>>(new Set());
   const [optimizing, setOptimizing] = useState(false);
   const [optimization, setOptimization] = useState<OptimizationResult | null>(null);
@@ -245,20 +261,17 @@ export default function Home() {
   const popularCalculated = useMemo(() => calculate(popularOffers), [calculate, popularOffers]);
   const ratioCalculated = useMemo(() => calculate(highRatioOffers), [calculate, highRatioOffers]);
 
-  const sortOffers = useCallback((source: CalculatedOffer[]) => [...source].sort((a, b) => {
-    const difference = (a[sortKey] ?? Number.NEGATIVE_INFINITY) - (b[sortKey] ?? Number.NEGATIVE_INFINITY);
-    return sortDirection === "asc" ? difference : -difference;
-  }), [sortDirection, sortKey]);
-  const sortedDetails = useMemo(() => sortOffers(detailCalculated), [detailCalculated, sortOffers]);
-  const sortedPopular = useMemo(() => [...popularCalculated].sort((a, b) => b.volume - a.volume), [popularCalculated]);
-  const sortedRatio = useMemo(() => [...ratioCalculated].sort((a, b) => b.lpRatio - a.lpRatio), [ratioCalculated]);
+  const sortedDetails = useMemo(() => sortCalculatedOffers(detailCalculated, { key: sortKey, direction: sortDirection }), [detailCalculated, sortDirection, sortKey]);
+  const sortedPopular = useMemo(() => sortCalculatedOffers(popularCalculated, popularSort), [popularCalculated, popularSort]);
+  const sortedRatio = useMemo(() => sortCalculatedOffers(ratioCalculated, ratioSort), [ratioCalculated, ratioSort]);
 
   function toggleSort(key: SortKey) {
     if (corporationId) setPage(1);
     if (sortKey === key) setSortDirection(direction => direction === "desc" ? "asc" : "desc");
     else { setSortKey(key); setSortDirection("desc"); }
   }
-  const sortArrow = (key: SortKey) => sortKey === key ? (sortDirection === "desc" ? " ↓" : " ↑") : " ↕";
+  const toggleTableSort = (setter: Dispatch<SetStateAction<TableSort>>, key: SortKey) => setter(current => current.key === key ? { key, direction: current.direction === "desc" ? "asc" : "desc" } : { key, direction: "desc" });
+  const sortArrow = (key: SortKey, sort: TableSort) => sort.key === key ? (sort.direction === "desc" ? " ↓" : " ↑") : " ↕";
 
   const formatNumber = (value: number, digits = 0) => value.toLocaleString(undefined, { maximumFractionDigits: digits });
   const magnitudeHint = (value: number) => {
@@ -276,10 +289,10 @@ export default function Home() {
     return next;
   });
 
-  const rankingTable = (title: string, subtitle: string, rows: CalculatedOffer[]) => <div className="table">
+  const rankingTable = (title: string, subtitle: string, rows: CalculatedOffer[], sort: TableSort, onSort: (key: SortKey) => void) => <div className="table">
     <div className="section-head ranking-head"><div><p className="eyebrow">{subtitle}</p><h2>{title}</h2></div></div>
     <div className="table-scroll">
-      <div className="offer-grid thead"><span>物品</span><span>数量</span><button className="sort-button" onClick={() => toggleSort("lp_cost")}>LP成本{sortArrow("lp_cost")}</button><button className="sort-button" onClick={() => toggleSort("isk_cost")}>ISK成本{sortArrow("isk_cost")}</button><button className="sort-button" onClick={() => toggleSort("materialCost")}>材料成本（卖价）{sortArrow("materialCost")}</button><button className="sort-button" onClick={() => toggleSort("sell_price")}>当前卖单{sortArrow("sell_price")}</button><button className="sort-button" onClick={() => toggleSort("buy_price")}>当前收单{sortArrow("buy_price")}</button><button className="sort-button" onClick={() => toggleSort("maxProfit")}>最大利润{sortArrow("maxProfit")}</button><button className="sort-button" onClick={() => toggleSort("minProfit")}>最小利润{sortArrow("minProfit")}</button><button className="sort-button" onClick={() => toggleSort("volume")}>日均交易量{sortArrow("volume")}</button><button className="sort-button" onClick={() => toggleSort("lpRatio")}>LP比例{sortArrow("lpRatio")}</button></div>
+      <div className="offer-grid thead"><span>物品</span><span>数量</span><button className="sort-button" onClick={() => onSort("lp_cost")}>LP成本{sortArrow("lp_cost", sort)}</button><button className="sort-button" onClick={() => onSort("isk_cost")}>ISK成本{sortArrow("isk_cost", sort)}</button><button className="sort-button" onClick={() => onSort("materialCost")}>材料成本（卖价）{sortArrow("materialCost", sort)}</button><button className="sort-button" onClick={() => onSort("sell_price")}>当前卖单{sortArrow("sell_price", sort)}</button><button className="sort-button" onClick={() => onSort("buy_price")}>当前收单{sortArrow("buy_price", sort)}</button><button className="sort-button" onClick={() => onSort("maxProfit")}>最大利润{sortArrow("maxProfit", sort)}</button><button className="sort-button" onClick={() => onSort("minProfit")}>最小利润{sortArrow("minProfit", sort)}</button><button className="sort-button" onClick={() => onSort("volume")}>日均交易量{sortArrow("volume", sort)}</button><button className="sort-button" onClick={() => onSort("lpRatio")}>LP比例{sortArrow("lpRatio", sort)}</button></div>
       {loading ? <div className="empty-state">正在读取数据库…</div> : rows.length ? rows.map(offer => {
         const key = `${offer.corporation_id}:${offer.offer_id}`;
         const isBest = false;
@@ -298,7 +311,7 @@ export default function Home() {
     </div>
   </div>;
 
-  const detailTable = rankingTable("企业兑换详情", `共 ${detailTotal.toLocaleString()} 条 · 当前第 ${page} / ${detailPages} 页`, sortedDetails);
+  const detailTable = rankingTable("企业兑换详情", `共 ${detailTotal.toLocaleString()} 条 · 当前第 ${page} / ${detailPages} 页`, sortedDetails, { key: sortKey, direction: sortDirection }, toggleSort);
   const corporationCalculator = <><section className="control-card compact corporation-calculator"><div className="control-title"><span className="step">01</span><div><b>当前企业 LP 组合优化</b><p>使用全部兑换方案计算，不受当前分页影响</p></div></div><label className="amount-label">可用 LP <div className="amount-field"><input type="text" inputMode="numeric" value={formatNumber(lp)} onChange={event => setLp(Math.max(0, Number(event.target.value.replace(/[^0-9]/g, "")) || 0))} /><small>{magnitudeHint(lp)}</small></div><span>LP</span></label><label>需求材料 <strong className="fixed-value">卖单价</strong></label><label>产出物 <strong className="fixed-value">收单价</strong></label><label>交易税 <input type="number" min="0" max="100" value={tax} onChange={event => setTax(Number(event.target.value))} /><span>%</span></label><button className="calculate-button" disabled={optimizing || lp <= 0} onClick={optimizeCorporation}>{optimizing ? "正在计算…" : "计算最优组合"}</button></section>{optimization && <section className="optimization-result"><div className="optimization-summary"><div><small>预计税后总利润</small><strong>{formatNumber(optimization.totalProfit)} ISK</strong><em>{magnitudeHint(optimization.totalProfit)} ISK</em></div><div><small>已使用 LP</small><b>{formatNumber(optimization.usedLp)}</b><em>{magnitudeHint(optimization.usedLp)} LP</em></div><div><small>剩余 LP</small><b>{formatNumber(optimization.remainingLp)}</b><em>{magnitudeHint(optimization.remainingLp)} LP</em></div><span>{optimization.exact ? "精确组合" : "大额 LP：尾部精确优化"}</span></div><div className="optimization-lines">{optimization.lines.map(line => <div key={line.offer.offer_id}><strong className="icon-label"><ItemIcon typeId={line.offer.type_id} name={line.offer.item_name} />{line.offer.item_name}</strong><b>× {formatNumber(line.count)}</b><span>消耗 {formatNumber(line.offer.lp_cost * line.count)} LP<small>{magnitudeHint(line.offer.lp_cost * line.count)}</small></span><span>利润 {formatNumber(line.offer.minProfit! * line.count)} ISK<small>{magnitudeHint(line.offer.minProfit! * line.count)}</small></span></div>)}</div></section>}</>;
   const implantSetPanel = implantSets.length ? <section className="implant-sets"><div><p className="eyebrow">特殊商品</p><h3>成套脑插市场价值</h3><span>完整 Alpha–Omega 六件套，按六件当前最高收单价合计</span></div>{implantSets.map(set => <div className="implant-set" key={set.name}><div className="implant-set-title"><strong>{set.name}套（6件）</strong></div><div className="implant-levels">{set.items.map((item, index) => <div key={item.level}><i>{index + 1}</i><ItemIcon typeId={item.type_id} name={item.name} /><span>{item.name}</span><b>{item.sell_price > 0 ? `${formatNumber(item.sell_price)} ISK` : "暂无卖单"}</b><em>{formatNumber(item.lp_cost)} LP</em><button className="market-order-link" onClick={event => openMarket({ typeId: item.type_id, name: item.name }, event.currentTarget)}>市场订单</button></div>)}</div><div className="implant-total"><div className="implant-total-ratio"><span>LP 比例</span><strong>{set.lp_ratio === null ? "—" : `${formatNumber(set.lp_ratio)} ISK/LP`}<small>{set.lp_ratio === null ? "价格未齐全" : "按扣除税费和成本后的净利润 ÷ 总 LP"}</small></strong></div><div><span>总价</span><strong>{set.market_value === null ? "价格未齐全" : `${formatNumber(set.market_value)} ISK`}<small>约 {set.market_value === null ? "—" : `${magnitudeHint(set.market_value)} ISK`}</small></strong></div><div className="implant-total-lp"><span>总计 LP</span><strong>{formatNumber(set.total_lp)} LP<small>约 {magnitudeHint(set.total_lp)} LP</small></strong></div></div></div>)}</section> : null;
 
@@ -306,7 +319,7 @@ export default function Home() {
     <nav className="topbar"><div className="brand"><span className="mark">✦</span><span>LP<span className="accent">/</span>换算器</span><small>晨曦 · 本地数据库</small></div><span className="database-state">{status}</span><a className="nav-action" href="/sync">数据同步 →</a></nav>
 
     <section className="results"><div className="section-head"><div><p className="eyebrow">{corporationId ? "企业详情" : "数据库榜单"}</p><h2>{corporationId ? "全部兑换方案" : "精选兑换方案"}</h2><p className="sub">{corporationId ? "具体企业使用数据库分页查询" : "仅在全部企业时展示两个前五榜单，不加载全量数据"} · {windowDays} 日历史成交 · 税率 {tax}%</p></div><div className="filters"><input aria-label="搜索物品" placeholder="⌕  搜索当前结果" value={query} onChange={event => setQuery(event.target.value)} /><div className="corporation-picker"><button className="picker-trigger" type="button" aria-expanded={corporationPickerOpen} onClick={() => { const opening = !corporationPickerOpen; setCorporationPickerOpen(opening); if (opening && !pickerFactionId) setPickerFactionId(factionId || corporationGroups[0]?.faction_id || 0); }}><span>{selectedFaction?.name || "全部势力"} <b>/</b> {selectedCorporation?.name || "全部企业"}</span><i>{corporationPickerOpen ? "⌃" : "⌄"}</i></button>{corporationPickerOpen && <div className="picker-menu"><div className="picker-search"><input aria-label="搜索企业" autoFocus placeholder="输入企业中文或英文名" value={corporationSearchInput} onChange={event => setCorporationSearchInput(event.target.value)} onKeyDown={event => { if (event.key === "Enter") applyCorporationSearch(); }} /><button type="button" onClick={applyCorporationSearch}>搜索</button></div><div className="picker-columns"><div className="faction-list"><button className={!factionId && !corporationId ? "selected" : ""} type="button" onClick={() => { setFactionId(0); setCorporationId(0); setCorporationPickerOpen(false); setPage(1); }}>全部势力与企业 <span>›</span></button>{corporationGroups.map(group => <button className={pickerFactionId === group.faction_id ? "active" : ""} type="button" key={group.faction_id} onClick={() => setPickerFactionId(group.faction_id)}><EntityIcon id={group.faction_id} name={group.name} kind="faction" /><b className="entity-name">{group.name}</b><small>{group.corporations.length}</small><span>›</span></button>)}{ungroupedCorporations.length > 0 && <button className={pickerFactionId === 0 ? "active" : ""} type="button" onClick={() => setPickerFactionId(0)}>其他企业<small>{ungroupedCorporations.length}</small><span>›</span></button>}</div><div className="corporation-list">{pickerCorporations.length ? pickerCorporations.map(corporation => <button className={corporationId === corporation.corporation_id ? "selected" : ""} type="button" key={corporation.corporation_id} onClick={() => { setFactionId(corporation.faction_id || 0); setCorporationId(corporation.corporation_id); setCorporationPickerOpen(false); setPage(1); }}><EntityIcon id={corporation.corporation_id} name={corporation.name} kind="corporation" /><b className="entity-name">{corporation.name}</b><small>{corporation.offer_count} 个方案</small></button>) : <p>该分类暂无匹配企业</p>}</div></div></div>}</div>{corporationId > 0 && <select aria-label="每页数量" value={pageSize} onChange={event => { setPageSize(event.target.value); setPage(1); }}><option value="10">每页 10 条</option><option value="20">每页 20 条</option><option value="50">每页 50 条</option><option value="all">全部数据</option></select>}</div></div>
-      {corporationId ? <>{corporationCalculator}{implantSetPanel}{detailTable}{pageSize !== "all" && <div className="pagination"><button disabled={page <= 1} onClick={() => setPage(value => Math.max(1, value - 1))}>上一页</button><span>第 {page} / {detailPages} 页</span><button disabled={page >= detailPages} onClick={() => setPage(value => Math.min(detailPages, value + 1))}>下一页</button></div>}</> : <>{rankingTable("热门物品前五", "按 30 日内日均交易量", sortedPopular)}{rankingTable("高比率前五", "按最高收单价计算的税后单位 LP 利润", sortedRatio)}</>}
+      {corporationId ? <>{corporationCalculator}{implantSetPanel}{detailTable}{pageSize !== "all" && <div className="pagination"><button disabled={page <= 1} onClick={() => setPage(value => Math.max(1, value - 1))}>上一页</button><span>第 {page} / {detailPages} 页</span><button disabled={page >= detailPages} onClick={() => setPage(value => Math.min(detailPages, value + 1))}>下一页</button></div>}</> : <>{rankingTable("热门物品前五", "按 30 日内日均交易量", sortedPopular, popularSort, key => toggleTableSort(setPopularSort, key))}{rankingTable("高比率前五", "按最高收单价计算的税后单位 LP 利润", sortedRatio, ratioSort, key => toggleTableSort(setRatioSort, key))}</>}
     </section>
     {marketTarget && <div className="market-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setMarketTarget(null); }}><section className="market-modal" role="dialog" aria-modal="true" aria-labelledby="market-modal-title"><header><div className="market-modal-title"><ItemIcon typeId={marketTarget.typeId} name={marketTarget.name} size={64} className="item-icon-large" /><div><small>本地数据库 · 当前订单快照</small><h2 id="market-modal-title">{marketTarget.name}</h2><code>TYPE ID {marketTarget.typeId}</code></div></div><button aria-label="关闭" onClick={() => setMarketTarget(null)}>×</button></header>{marketLoading ? <div className="market-modal-loading">正在读取本地数据库…</div> : marketSnapshot?.collected_at ? <><div className="market-order-grid">{(["buy", "sell"] as const).map(side => { const levels = side === "buy" ? marketSnapshot.buy_levels : marketSnapshot.sell_levels; return <div key={side}><small>{side === "buy" ? "当前收单 · 价格从高到低" : "当前卖单 · 价格从低到高"}</small><div className="order-level-head"><span>档位</span><span>价格</span><span>数量</span></div><div className="order-level-list">{levels.length ? levels.map(level => <div key={level.level}><i>{level.level}</i><b>{formatNumber(level.price)} ISK</b><span>{formatNumber(level.volume)} 个</span></div>) : <p>暂无五档数据，请重新同步当前订单</p>}</div></div>; })}</div><details className="market-history"><summary>历史成交（最近 30 日）</summary><div className="market-history-summary"><span>交易天数 <b>{marketSnapshot.history_summary.days}</b></span><span>总成交量 <b>{formatNumber(marketSnapshot.history_summary.total_volume)}</b></span><span>加权均价 <b>{marketSnapshot.history_summary.weighted_average === null ? "—" : `${formatNumber(marketSnapshot.history_summary.weighted_average)} ISK`}</b></span></div>{marketSnapshot.history.length ? <div className="market-history-table"><div><span>日期</span><span>均价</span><span>最高</span><span>最低</span><span>成交量</span></div>{marketSnapshot.history.map(day => <div key={day.trade_date}><span>{day.trade_date}</span><span>{formatNumber(day.average_price)}</span><span>{formatNumber(day.highest_price)}</span><span>{formatNumber(day.lowest_price)}</span><span>{formatNumber(day.volume)}</span></div>)}</div> : <p>暂无历史成交数据</p>}</details><footer><span>采集时间</span><b>{new Date(marketSnapshot.collected_at).toLocaleString("zh-CN")}</b></footer></> : <div className="market-modal-loading">本地数据库暂无该物品的订单快照，请先执行当前订单或关联同步。</div>}</section></div>}
     <footer><span>数据存储于项目本地 SQLite/D1</span><span>同步失败不会清空上一轮数据，可稍后继续。</span></footer>
