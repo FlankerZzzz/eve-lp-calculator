@@ -5,8 +5,13 @@ import { join } from "node:path";
 const CACHE_ROOT = process.env.ENTITY_ICON_CACHE_PATH || "/data/entity-icons";
 const SERENITY_IMAGE_BASE = process.env.SERENITY_IMAGE_BASE_URL || "https://image.evepc.163.com";
 const IMAGE_BASE = process.env.EVE_IMAGE_BASE_URL || "https://images.evetech.net";
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 const ALLOWED_SIZES = new Set([32, 64, 128, 256, 512, 1024]);
+const SERENITY_DEFAULT_LOGO_HASHES = new Set([
+  "6b15ee7621c4c41bdacbc57daf19b05d891179c27563653fbcc4d1b1765834ad",
+  "2b0fe1aaf7a496e4d7f52f18af1db39327519a15a1d03bfa8c52f90e3696bcc6",
+  "0e6896a4d4d0c1e0cb878f1cc479604857ae13031ec18e7a9779561d63130aae",
+]);
 
 type CacheRef = { hash: string; contentType: string };
 
@@ -69,6 +74,8 @@ export async function GET(request: Request) {
       networkSource = "network-cn";
       try {
         fetched = await requestImage(`${SERENITY_IMAGE_BASE.replace(/\/$/, "")}/Corporation/${entityId}_${size}.png`);
+        const sourceHash = createHash("sha256").update(fetched.body).digest("hex");
+        if (SERENITY_DEFAULT_LOGO_HASHES.has(sourceHash)) throw new Error("Serenity returned its default corporation logo");
       } catch {
         networkSource = "network-intl";
         fetched = await requestImage(`${IMAGE_BASE.replace(/\/$/, "")}/corporations/${entityId}/logo?size=${size}`);
