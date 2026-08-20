@@ -42,6 +42,17 @@ test("组合计算的全量材料查询按小批次执行", async () => {
   assert.match(route, /pageSize = requestedSize === "all"/);
 });
 
+test("组合计算显示保守口径的总体价值和 LP 比例", async () => {
+  const page = await source("app/page.tsx");
+  assert.match(page, /unitPrice = material\.sell_price/);
+  assert.match(page, /minProfit = offer\.buy_price > 0/);
+  assert.match(page, /totalValue = lines\.reduce\(\(sum, line\) => sum \+ line\.offer\.buy_price \* line\.offer\.revenue_quantity \* line\.count/);
+  assert.match(page, /lpRatio = usedLp > 0 \? totalProfit \/ usedLp : 0/);
+  assert.match(page, /总体价值（收单）/);
+  assert.match(page, /总体 LP 比例/);
+  assert.match(page, /税后净利润 ÷ 已使用 LP/);
+});
+
 test("历史同步跳过不可交易和不存在的物品", async () => {
   const [history, esi] = await Promise.all([source("app/api/sync/history/route.ts"), source("lib/esi-server.ts")]);
   assert.match(history, /if \(!isMarketUnavailable\(error\)\) throw error/);
