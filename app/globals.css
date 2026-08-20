@@ -31,3 +31,58 @@
 
 .item-icon{width:32px;height:32px;object-fit:contain;flex:0 0 auto;border-radius:3px;background:#0b1014}.item-icon-large{width:64px;height:64px}.icon-label{display:flex;align-items:center;gap:9px;min-width:0}.offer-grid .item{display:flex;align-items:center;gap:10px}.market-modal-title{display:flex;align-items:center;gap:14px}.implant-levels>div{grid-template-columns:34px 32px minmax(180px,1fr) 160px 110px 92px}@media(max-width:600px){.implant-levels>div{grid-template-columns:28px 32px minmax(110px,1fr) 110px 86px 80px}.item-icon-large{width:48px;height:48px}}
 .entity-icon{width:32px;height:32px;object-fit:contain;flex:0 0 32px;border-radius:3px;background:#0b1014}.filters .faction-list button,.filters .corporation-list button{gap:10px}.filters .faction-list .entity-name,.filters .corporation-list .entity-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:inherit;font-weight:400}.filters .corporation-list button{justify-content:flex-start}.corporation-list button small{white-space:nowrap}
+
+/* Mobile-only presentation. Desktop tables and spacing remain unchanged. */
+.mobile-offer-card,.mobile-sort{display:none}
+@media(max-width:760px){
+  body{overflow-x:hidden}
+  main{width:100%;padding:0 14px}
+  .topbar{height:64px;gap:10px}
+  .brand{font-size:16px;min-width:0}.brand small{display:none}.mark{font-size:20px}
+  .nav-action{margin-left:auto;min-height:40px;display:flex;align-items:center;padding:8px 10px}
+  main .results{padding:26px 0 34px}
+  .section-head{margin-bottom:18px}.section-head h2{font-size:22px}.section-head .sub{font-size:12px;line-height:1.55}
+  .filters{display:grid;grid-template-columns:1fr;width:100%;gap:10px;margin-top:16px}
+  .filters>input,.filters>select,.filters>.corporation-picker{width:100%;max-width:none;min-width:0}
+  .filters input,.filters select,.filters button{min-height:44px;font-size:13px}
+  .picker-trigger{min-height:46px}
+  .picker-menu{inset:max(10px,env(safe-area-inset-top)) 10px max(10px,env(safe-area-inset-bottom));width:auto;height:auto;display:flex;flex-direction:column;border-color:#51616b;box-shadow:0 0 0 100vmax #030608d9;clip-path:inset(-100vmax)}
+  .picker-search{flex:0 0 auto;padding:10px}.picker-columns{display:grid;grid-template-columns:1fr;height:auto;max-height:none;min-height:0;flex:1}
+  .faction-list,.corporation-list{height:auto;min-height:0;padding:6px}.faction-list{border-right:0;border-bottom:1px solid #303840;max-height:34vh}.corporation-list{max-height:42vh}
+  .filters .faction-list button,.filters .corporation-list button{min-height:48px;padding:7px 9px;font-size:14px}
+  .entity-icon{width:36px;height:36px;flex-basis:36px}
+  .ranking-head{margin:28px 0 12px}.ranking-head h2{font-size:21px}
+  .table{display:block;width:100%}
+  .table-scroll,.offer-group,.mobile-offer-card{width:100%}
+  .table-scroll{overflow:visible;margin:0;border-top:0}
+  .table .offer-grid.thead,.table .offer-grid.row{display:none}
+  .mobile-sort{display:flex;gap:6px;align-items:center;overflow-x:auto;padding:0 0 10px;scrollbar-width:none}
+  .mobile-sort::-webkit-scrollbar{display:none}.mobile-sort span{color:var(--muted);font:11px monospace;margin-right:2px;white-space:nowrap}
+  .mobile-sort button{appearance:none;background:#111a1d;border:1px solid #33444a;color:var(--text);min-height:40px;padding:8px 10px;font-size:11px;white-space:nowrap}
+  .mobile-sort button:focus-visible{outline:1px solid var(--mint);outline-offset:2px}
+  .offer-group{margin-bottom:12px}
+  .mobile-offer-card{display:block;background:#10161b;border:1px solid #29353d;padding:14px}
+  .mobile-offer-card header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .mobile-offer-name{display:flex;align-items:center;gap:10px;min-width:0}.mobile-offer-name>div{min-width:0}
+  .mobile-offer-name strong{display:block;font-size:14px;line-height:1.35;overflow-wrap:anywhere}.mobile-offer-name small{display:block;color:var(--muted);font-size:10px;line-height:1.45;margin-top:4px}
+  .mobile-offer-card .market-order-link{flex:0 0 auto;min-height:38px;padding:8px 0;font-size:11px}
+  .mobile-key-metrics{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:1px;background:#26323a;margin:14px 0 0}
+  .mobile-key-metrics>div{background:#0d1318;padding:12px;min-width:0}.mobile-key-metrics small{display:block;color:var(--muted);font-size:10px;margin-bottom:7px}
+  .mobile-key-metrics strong{display:block;font:18px Georgia;overflow-wrap:anywhere}.mobile-key-metrics strong>em{display:block;color:var(--muted);font:9px monospace;margin-top:3px}
+  .mobile-key-metrics>div>em{display:block;color:#7f948d;font:9px/1.4 monospace;font-style:normal;margin-top:4px}
+  .mobile-quick-facts{display:flex;flex-wrap:wrap;gap:8px 14px;padding:11px 0;color:var(--muted);font:10px monospace;border-bottom:1px solid #26323a}.mobile-quick-facts b{color:var(--text);font-weight:400}
+  .mobile-offer-details{border-bottom:1px solid #26323a}.mobile-offer-details summary{cursor:pointer;color:var(--mint);font-size:11px;padding:12px 0}.mobile-offer-details summary::marker{color:var(--mint)}
+  .mobile-offer-details dl{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#26323a;margin:0 0 12px}.mobile-offer-details dl>div{background:#10161b;padding:9px;min-width:0}.mobile-offer-details dt{color:var(--muted);font-size:9px}.mobile-offer-details dd{margin:5px 0 0;font:11px monospace;overflow-wrap:anywhere}
+  .mobile-material-toggle{width:100%;min-height:42px;margin-top:10px;background:#13231f;border:1px solid #315f52;color:var(--mint);font-size:11px}
+  .material-panel{min-width:0;margin:0;padding:8px 12px 12px;background:#0d1318}.material-head{display:none}.material-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;min-height:0;padding:12px 0}.material-row>span:first-child,.material-row>strong{grid-column:1/-1}.material-row>strong{font-size:12px}.material-row>span{font-size:10px}.material-row>span:nth-of-type(2)::before{content:"数量"}.material-row>span:nth-of-type(3)::before{content:"材料单价（卖价）"}.material-row>span:nth-of-type(4)::before{content:"成本"}.material-row>span::before{display:block;color:var(--muted);font-size:9px;margin-bottom:4px}.material-row .market-order-button{grid-column:1/-1;min-height:40px}.no-materials{padding:14px 0}
+  .control-card.corporation-calculator{display:grid;grid-template-columns:1fr;margin-bottom:16px;padding:18px;gap:16px}.corporation-calculator .control-title{min-width:0}.corporation-calculator label{justify-content:space-between;font-size:13px}.control-card .amount-field{margin-left:auto}.control-card .amount-field input{width:min(180px,55vw);min-height:44px}.corporation-calculator .calculate-button{min-height:48px;margin:0;width:100%;font-size:14px}
+  .optimization-summary{grid-template-columns:1fr 1fr;gap:16px;padding:16px}.optimization-summary>div:first-child,.optimization-summary>div:nth-child(2){grid-column:1/-1}.optimization-summary strong{font-size:clamp(18px,6vw,24px)}.optimization-summary b{font-size:14px}.optimization-summary>span{justify-self:start}
+  .optimization-lines{padding:4px 14px 12px;overflow:visible}.optimization-lines>div{min-width:0;grid-template-columns:1fr auto;gap:8px;padding:12px 0;min-height:0}.optimization-lines>div>strong{grid-column:1/-1}.optimization-lines>div>span{text-align:right}
+  .implant-sets{padding:16px 12px}.implant-sets h3{font-size:18px}.implant-levels>div{grid-template-columns:24px 32px minmax(0,1fr) auto;gap:8px;padding:10px 0;min-height:0}.implant-levels>div>span{font-size:12px;overflow-wrap:anywhere}.implant-levels>div>b{grid-column:3;text-align:left;font-size:12px}.implant-levels>div>em{grid-column:4;font-size:12px}.implant-levels .market-order-link{grid-column:4;grid-row:1;min-height:36px}.implant-total{display:grid;grid-template-columns:1fr;gap:14px;align-items:stretch}.implant-total>div{display:flex;justify-content:space-between;gap:12px;margin:0}.implant-total>div>strong,.implant-total-lp strong,.implant-total-ratio strong{font-size:clamp(20px,6vw,27px)!important;text-align:right}.implant-total-ratio small{white-space:normal}
+  .market-modal-backdrop{padding:0;place-items:stretch}.market-modal{width:100%;height:100dvh;max-height:none;border:0;padding-bottom:env(safe-area-inset-bottom)}.market-modal>header{position:sticky;top:0;z-index:2;background:#11171d;padding:14px}.market-modal header h2{font-size:18px}.market-modal header button{width:44px;height:44px}.market-order-grid>div{padding:18px 14px}.market-history summary,.market-history-summary{padding-left:14px;padding-right:14px}.market-history-table{padding:0 14px 18px}.market-modal footer{padding:13px 14px;gap:10px;flex-wrap:wrap}
+  footer{display:grid;gap:8px;padding-bottom:max(28px,env(safe-area-inset-bottom))}
+}
+@media(max-width:380px){
+  main{padding:0 10px}.mobile-offer-card{padding:12px}.mobile-key-metrics strong{font-size:16px}.mobile-offer-card .market-order-link{font-size:10px}.optimization-summary{grid-template-columns:1fr}.optimization-summary>div{grid-column:1!important}
+}
+@media(pointer:coarse){button,a,input,select,summary{touch-action:manipulation}}

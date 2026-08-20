@@ -35,6 +35,20 @@ test("首页两个榜单使用独立且可切换的排序状态", async () => {
   assert.doesNotMatch(page, /sortedPopular.*b\.volume - a\.volume/);
 });
 
+test("手机端使用独立卡片且桌面表格保持默认显示", async () => {
+  const [page, css] = await Promise.all([source("app/page.tsx"), source("app/globals.css")]);
+  assert.match(page, /className="mobile-offer-card"/);
+  assert.match(page, /className="mobile-sort"/);
+  assert.match(page, /查看全部价格与成本/);
+  assert.match(page, /查看材料明细/);
+  assert.match(css, /\.mobile-offer-card,\.mobile-sort\{display:none\}/);
+  assert.match(css, /@media\(max-width:760px\)/);
+  assert.match(css, /\.table \.offer-grid\.thead,\.table \.offer-grid\.row\{display:none\}/);
+  assert.match(css, /\.mobile-offer-card\{display:block/);
+  assert.match(css, /\.picker-menu\{inset:max\(10px,env\(safe-area-inset-top\)\)/);
+  assert.match(css, /height:100dvh/);
+});
+
 test("组合计算的全量材料查询按小批次执行", async () => {
   const route = await source("app/api/data/offers/route.ts");
   assert.match(route, /index \+= 20/);
