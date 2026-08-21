@@ -61,7 +61,13 @@ test("增效剂蓝图默认过滤且可以手动显示", async () => {
   assert.match(worker, /include_booster_blueprints: "1"/);
   assert.match(worker, /slice\(0, 100\)/);
   assert.match(rankings, /rows\.slice\(0, 100\)/);
-  assert.match(route, /filter\(offer => includeBoosterBlueprints \|\| !isBoosterBlueprint\(offer\)\)\.slice\(0, 5\)/);
+  assert.match(route, /filter\(offer => includeBoosterBlueprints \|\| !isBoosterBlueprint\(offer\)\)\.slice\(0, 20\)/);
+});
+
+test("首页榜单扩展为前二十", async () => {
+  const [page, route] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts")]);
+  assert.match(page, /前二十榜单/);
+  assert.match(route, /filter\(offer => includeBoosterBlueprints \|\| !isBoosterBlueprint\(offer\)\)\.slice\(0, 20\)/);
 });
 
 test("组合计算的全量材料查询按小批次执行", async () => {
