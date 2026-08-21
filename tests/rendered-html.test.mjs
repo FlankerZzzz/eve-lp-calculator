@@ -17,7 +17,7 @@ test("最大利润用最低卖单、最小利润用最高收单", async () => {
 
 test("首页只读取每日固定榜单快照", async () => {
   const [page, route, worker] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts"), source("scripts/sync-worker.mjs")]);
-  assert.match(page, /热门物品前五/);
+  assert.match(page, /热门物品榜/);
   assert.match(route, /FROM ranking_snapshots/);
   assert.match(worker, /rebuildRankings/);
   assert.doesNotMatch(route, /ORDER BY daily_volume DESC, lp_ratio DESC LIMIT 5/);
@@ -61,13 +61,15 @@ test("增效剂蓝图默认过滤且可以手动显示", async () => {
   assert.match(worker, /include_booster_blueprints: "1"/);
   assert.match(worker, /slice\(0, 100\)/);
   assert.match(rankings, /rows\.slice\(0, 100\)/);
-  assert.match(route, /filter\(offer => includeBoosterBlueprints \|\| !isBoosterBlueprint\(offer\)\)\.slice\(0, 20\)/);
+  assert.match(route, /filter\(offer => includeBoosterBlueprints \|\| !isBoosterBlueprint\(offer\)\)\.slice\(0, 100\)/);
 });
 
-test("首页榜单扩展为前二十", async () => {
+test("首页榜单扩展为前一百并支持分页", async () => {
   const [page, route] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts")]);
-  assert.match(page, /前二十榜单/);
-  assert.match(route, /filter\(offer => includeBoosterBlueprints \|\| !isBoosterBlueprint\(offer\)\)\.slice\(0, 20\)/);
+  assert.match(page, /前 100 条/);
+  assert.match(page, /rankingPager/);
+  assert.match(page, /每页 100 条/);
+  assert.match(route, /filter\(offer => includeBoosterBlueprints \|\| !isBoosterBlueprint\(offer\)\)\.slice\(0, 100\)/);
 });
 
 test("组合计算的全量材料查询按小批次执行", async () => {
