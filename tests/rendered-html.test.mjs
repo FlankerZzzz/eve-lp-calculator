@@ -49,6 +49,21 @@ test("手机端使用独立卡片且桌面表格保持默认显示", async () =>
   assert.match(css, /height:100dvh/);
 });
 
+test("增效剂蓝图默认过滤且可以手动显示", async () => {
+  const [page, route, worker, rankings] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts"), source("scripts/sync-worker.mjs"), source("app/api/sync/rankings/route.ts")]);
+  assert.match(route, /include_booster_blueprints/);
+  assert.match(route, /br\.blueprint_type_id IS NOT NULL/);
+  assert.match(route, /增效体/);
+  assert.match(route, /%booster%/);
+  assert.match(page, /showBoosterBlueprints/);
+  assert.match(page, /显示增效剂蓝图/);
+  assert.match(page, /隐藏增效剂蓝图/);
+  assert.match(worker, /include_booster_blueprints: "1"/);
+  assert.match(worker, /slice\(0, 100\)/);
+  assert.match(rankings, /rows\.slice\(0, 100\)/);
+  assert.match(route, /filter\(offer => includeBoosterBlueprints \|\| !isBoosterBlueprint\(offer\)\)\.slice\(0, 5\)/);
+});
+
 test("组合计算的全量材料查询按小批次执行", async () => {
   const route = await source("app/api/data/offers/route.ts");
   assert.match(route, /index \+= 20/);

@@ -134,7 +134,7 @@ async function rebuildRankings(job) {
     if (current?.status !== "running" || current.run_started_at !== job.run_started_at) return;
     const chunk = corporations.slice(index, index + 4);
     const batches = await Promise.all(chunk.map(async corporation => {
-      const params = new URLSearchParams({ corporation_id: String(corporation.corporation_id), view: "detail", page_size: "all", days: "30", tax: "3" });
+      const params = new URLSearchParams({ corporation_id: String(corporation.corporation_id), view: "detail", page_size: "all", days: "30", tax: "3", include_booster_blueprints: "1" });
       const response = await fetch(`${baseUrl}/api/data/offers?${params}`, { cache: "no-store" });
       if (!response.ok) throw new Error(`企业 ${corporation.corporation_id} 榜单数据 HTTP ${response.status}`);
       return (await response.json()).offers || [];
@@ -145,7 +145,7 @@ async function rebuildRankings(job) {
     processed += chunk.length;
     await fetch(`${baseUrl}/api/sync/rankings`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "progress", runStartedAt: job.run_started_at, processed: chunk.length, remaining: corporations.length - processed }) });
   }
-  const response = await fetch(`${baseUrl}/api/sync/rankings`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "complete", runStartedAt: job.run_started_at, popular: [...popular.values()].sort((a, b) => b.daily_volume - a.daily_volume).slice(0, 5), highRatio: [...highRatio.values()].sort((a, b) => b.lp_ratio - a.lp_ratio).slice(0, 5) }) });
+  const response = await fetch(`${baseUrl}/api/sync/rankings`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "complete", runStartedAt: job.run_started_at, popular: [...popular.values()].sort((a, b) => b.daily_volume - a.daily_volume).slice(0, 100), highRatio: [...highRatio.values()].sort((a, b) => b.lp_ratio - a.lp_ratio).slice(0, 100) }) });
   if (!response.ok) throw new Error(`保存榜单 HTTP ${response.status}`);
 }
 
