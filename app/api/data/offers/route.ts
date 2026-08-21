@@ -30,11 +30,18 @@ export async function GET(request: Request) {
   const page = Math.floor(pageRaw);
   const sortKey = url.searchParams.get("sort_key") || "lpRatio";
   const sortDirection = url.searchParams.get("sort_direction") === "asc" ? "ASC" : "DESC";
+  const includeBoosterBlueprints = url.searchParams.get("include_booster_blueprints") === "1";
   const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
   const filters: number[] = [];
   const conditions: string[] = [];
   if (factionId) { conditions.push("c.faction_id = ?"); filters.push(factionId); }
   if (corporationId) { conditions.push("o.corporation_id = ?"); filters.push(corporationId); }
+  if (!includeBoosterBlueprints) conditions.push(`NOT (br.blueprint_type_id IS NOT NULL AND (
+    COALESCE(t.name_zh, '') LIKE '%增效体%' OR COALESCE(t.name_zh, '') LIKE '%增效剂%'
+    OR COALESCE(pt.name_zh, '') LIKE '%增效体%' OR COALESCE(pt.name_zh, '') LIKE '%增效剂%'
+    OR LOWER(COALESCE(t.name_en, '')) LIKE '%booster%blueprint%'
+    OR LOWER(COALESCE(pt.name_en, '')) LIKE '%booster%'
+  ))`);
   const where = `WHERE c.faction_id NOT IN (${HIDDEN_FACTION_SQL})${conditions.length ? ` AND ${conditions.join(" AND ")}` : ""}`;
 
   const baseSql = `
@@ -117,7 +124,7 @@ export async function GET(request: Request) {
   if (corporationId && url.searchParams.get("view") === "detail") {
     const requestedSize = url.searchParams.get("page_size") || "10";
     if (requestedSize !== "all" && ![10, 20, 50].includes(Number(requestedSize))) return Response.json({ error: "page_size 无效" }, { status: 400 });
-    const total = (await db.prepare("SELECT COUNT(*) count FROM lp_offers WHERE corporation_id=?").bind(corporationId).first<{ count: number }>())?.count ?? 0;
+    const total = (await db.prepare(`SELECT COUNT(*) count FROM (${baseSql}) ranked`).bind(...bindings).first<{ count: number }>())?.count ?? 0;
     const pageSize = requestedSize === "all" ? Math.max(1, total) : Number(requestedSize);
     const sortColumns: Record<string, string> = { lp_cost: "lp_cost", isk_cost: "isk_cost", materialCost: "material_total", sell_price: "sell_price", buy_price: "buy_price", maxProfit: "max_profit", minProfit: "min_profit", volume: "daily_volume", lpRatio: "lp_ratio" };
     const sortColumn = sortColumns[sortKey] || "lp_ratio";
@@ -146,7 +153,8 @@ export async function GET(request: Request) {
   }
 
   const snapshots = (await db.prepare("SELECT list_kind, rank, snapshot_date, calculated_at, payload FROM ranking_snapshots ORDER BY list_kind, rank").all<{ list_kind: string; rank: number; snapshot_date: string; calculated_at: string; payload: string }>()).results;
-  const parse = (kind: string) => snapshots.filter(row => row.list_kind === kind).map(row => JSON.parse(row.payload));
+  const isBoosterBlueprint = (offer: OfferRow) => Boolean(offer.is_blueprint) && /增效体|增效剂|booster/i.test(`${offer.item_name || ""} ${offer.product_name || ""}`);
+  const parse = (kind: string) => snapshots.filter(row => row.list_kind === kind).map(row => JSON.parse(row.payload) as OfferRow).filter(offer => includeBoosterBlueprints || !isBoosterBlueprint(offer)).slice(0, 5);
   return Response.json({
     popular: parse("popular"),
     highRatio: parse("highRatio"),

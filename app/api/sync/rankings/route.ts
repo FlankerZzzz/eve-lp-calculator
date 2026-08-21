@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   const date = chinaDate();
   const statements = [db.prepare("DELETE FROM ranking_snapshots")];
   for (const [kind, rows] of [["popular", body.popular], ["highRatio", body.highRatio]] as const) {
-    rows.slice(0, 5).forEach((row, index) => statements.push(db.prepare("INSERT INTO ranking_snapshots (list_kind, rank, snapshot_date, calculated_at, payload) VALUES (?, ?, ?, ?, ?)").bind(kind, index + 1, date, now, JSON.stringify(row))));
+    rows.slice(0, 100).forEach((row, index) => statements.push(db.prepare("INSERT INTO ranking_snapshots (list_kind, rank, snapshot_date, calculated_at, payload) VALUES (?, ?, ?, ?, ?)").bind(kind, index + 1, date, now, JSON.stringify(row))));
   }
   await db.batch(statements);
   await updateSyncJob({ kind: "rankings", status: "complete", phase: "今日榜单已固定", remaining: 0, endpoint: "/api/sync/rankings", httpStatus: 200, response: { snapshotDate: date, popular: body.popular.length, highRatio: body.highRatio.length } });
