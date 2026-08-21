@@ -154,7 +154,7 @@ export async function GET(request: Request) {
 
   const snapshots = (await db.prepare("SELECT list_kind, rank, snapshot_date, calculated_at, payload FROM ranking_snapshots ORDER BY list_kind, rank").all<{ list_kind: string; rank: number; snapshot_date: string; calculated_at: string; payload: string }>()).results;
   const isBoosterBlueprint = (offer: OfferRow) => Boolean(offer.is_blueprint) && /增效体|增效剂|booster/i.test(`${offer.item_name || ""} ${offer.product_name || ""}`);
-  const parse = (kind: string) => snapshots.filter(row => row.list_kind === kind).map(row => JSON.parse(row.payload) as OfferRow).filter(offer => includeBoosterBlueprints || !isBoosterBlueprint(offer)).slice(0, 20);
+  const parse = (kind: string) => snapshots.filter(row => row.list_kind === kind).map(row => JSON.parse(row.payload) as OfferRow).filter(offer => includeBoosterBlueprints || !isBoosterBlueprint(offer)).slice(0, 100);
   return Response.json({
     popular: parse("popular"),
     highRatio: parse("highRatio"),

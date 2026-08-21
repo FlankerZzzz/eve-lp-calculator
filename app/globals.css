@@ -35,6 +35,7 @@
 /* Mobile-only presentation. Desktop tables and spacing remain unchanged. */
 .mobile-offer-card,.mobile-sort{display:none}
 .booster-blueprint-filter{display:flex;align-items:center;justify-content:flex-end;gap:14px;margin:24px 0 10px;color:var(--muted);font:11px monospace}.booster-blueprint-filter button{min-height:38px;padding:8px 14px;background:#111a1d;border:1px solid #315f52;color:var(--mint);cursor:pointer}.booster-blueprint-filter.active{color:#d3a86b}.booster-blueprint-filter.active button{border-color:#765a35;color:#e7b66f;background:#211b14}
+.ranking-pagination{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:8px 0 30px;color:var(--muted);font:11px monospace}.ranking-pagination select,.ranking-pagination button{min-height:34px;padding:6px 10px;background:#11171c;border:1px solid #33444a;color:var(--text)}.ranking-pagination button:not(:disabled){cursor:pointer;color:var(--mint);border-color:#315f52}.ranking-pagination button:disabled{opacity:.45;cursor:not-allowed}
 @media(max-width:760px){
   body{overflow-x:hidden}
   main{width:100%;padding:0 14px}
@@ -60,6 +61,7 @@
   .ranking-head{margin:28px 0 12px}.ranking-head h2{font-size:21px}
   .table{display:block;width:100%}
   .booster-blueprint-filter{justify-content:space-between;margin:18px 0 12px;padding:10px 12px;background:#10161b;border:1px solid #29353d}.booster-blueprint-filter button{min-height:42px;padding:8px 11px;font-size:11px}
+  .ranking-pagination{justify-content:space-between;flex-wrap:wrap;margin:4px 0 24px;gap:6px}.ranking-pagination span{flex:1 0 100%}.ranking-pagination select,.ranking-pagination button{min-height:40px}
   .table-scroll,.offer-group,.mobile-offer-card{width:100%}
   .table-scroll{overflow:visible;margin:0;border-top:0}
   .table .offer-grid.thead,.table .offer-grid.row{display:none}
