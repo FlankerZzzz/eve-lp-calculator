@@ -24,6 +24,7 @@ type MarketOrderLevel = { side: "buy" | "sell"; level: number; price: number; vo
 type MarketHistoryDay = { trade_date: string; average_price: number; highest_price: number; lowest_price: number; volume: number };
 type MarketOrderSnapshot = { type_id: number; item_name: string; buy_price: number | null; sell_price: number | null; buy_volume: number | null; sell_volume: number | null; collected_at: string | null; buy_levels: MarketOrderLevel[]; sell_levels: MarketOrderLevel[]; history: MarketHistoryDay[]; history_summary: { days: number; total_volume: number; weighted_average: number | null } };
 type ImplantSet = { name: string; item_count: number; total_lp: number; lp_ratio: number | null; priced_count: number; market_value: number | null; items: { level: string; type_id: number; name: string; lp_cost: number; sell_price: number }[] };
+const MAX_CALCULATION_LP = 99_990_000;
 
 function ItemIcon({ typeId, name, size = 32, className = "" }: { typeId: number; name: string; size?: 32 | 64 | 128; className?: string }) {
   return <img className={`item-icon ${className}`.trim()} src={`/api/data/item-icon?type_id=${typeId}&size=${size}`} width={size} height={size} loading="lazy" decoding="async" alt={`${name}图标`} />;
@@ -52,6 +53,7 @@ function sortCalculatedOffers(source: CalculatedOffer[], sort: TableSort) {
 
 export default function Home() {
   const [lp, setLp] = useState(100000);
+  useEffect(() => { if (lp > MAX_CALCULATION_LP) setLp(MAX_CALCULATION_LP); }, [lp]);
   const [tax, setTax] = useState(3);
   const [windowDays] = useState(30);
   const [query, setQuery] = useState("");
