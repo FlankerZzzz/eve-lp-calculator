@@ -10,8 +10,10 @@ RUN npm install --no-audit --no-fund
 ENV HTTP_PROXY=
 ENV HTTPS_PROXY=
 COPY . .
+RUN npm run build
 
 ENV ESI_BASE_URL=https://ali-esi.evepc.163.com
+ENV NODE_ENV=production
 ENV SQLITE_RUNTIME=1
 ENV SQLITE_PATH=/data/eve-lp.db
 ENV WRANGLER_WRITE_LOGS=false
@@ -20,4 +22,4 @@ ENV MINIFLARE_REGISTRY_PATH=/app/.wrangler/registry
 
 EXPOSE 3000
 VOLUME ["/data"]
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
+CMD ["npm", "run", "start", "--", "--hostname", "0.0.0.0", "--port", "3000"]

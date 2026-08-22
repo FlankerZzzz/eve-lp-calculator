@@ -14,7 +14,9 @@ export async function POST(request: Request) {
     await updateSyncJob({ kind: "history", status: "running", phase: "历史成交日线", runStartedAt, response: { message: "开始读取市场历史" } });
     const lpOutput = `EXISTS (SELECT 1 FROM lp_offers o JOIN corporations c ON c.corporation_id=o.corporation_id WHERE o.type_id=item_types.type_id AND c.faction_id NOT IN (${HIDDEN_FACTION_SQL}))`;
     const blueprintProduct = `EXISTS (SELECT 1 FROM blueprint_recipes b JOIN lp_offers o ON o.type_id=b.blueprint_type_id JOIN corporations c ON c.corporation_id=o.corporation_id WHERE b.product_type_id=item_types.type_id AND c.faction_id NOT IN (${HIDDEN_FACTION_SQL}))`;
-    const eligible = `(${lpOutput} OR ${blueprintProduct})`;
+    const lpMaterial = `EXISTS (SELECT 1 FROM lp_offer_materials m JOIN lp_offers o ON o.corporation_id=m.corporation_id AND o.offer_id=m.offer_id JOIN corporations c ON c.corporation_id=o.corporation_id WHERE m.type_id=item_types.type_id AND c.faction_id NOT IN (${HIDDEN_FACTION_SQL}))`;
+    const blueprintMaterial = `EXISTS (SELECT 1 FROM blueprint_materials m JOIN blueprint_recipes b ON b.blueprint_type_id=m.blueprint_type_id JOIN lp_offers o ON o.type_id=b.blueprint_type_id JOIN corporations c ON c.corporation_id=o.corporation_id WHERE m.material_type_id=item_types.type_id AND c.faction_id NOT IN (${HIDDEN_FACTION_SQL}))`;
+    const eligible = `(${lpOutput} OR ${blueprintProduct} OR ${lpMaterial} OR ${blueprintMaterial})`;
     const pending = (await db.prepare(`SELECT type_id FROM item_types WHERE ${eligible} AND (history_synced_at IS NULL OR history_synced_at < ?) ORDER BY COALESCE(history_synced_at, '') LIMIT 50`).bind(runStartedAt).all<{ type_id: number }>()).results;
     const results: Array<{ row: { type_id: number }; history: HistoryRow[]; syncedAt: string }> = [];
     const failed: number[] = [];
