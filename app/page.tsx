@@ -25,6 +25,8 @@ type MarketHistoryDay = { trade_date: string; average_price: number; highest_pri
 type MarketOrderSnapshot = { type_id: number; item_name: string; buy_price: number | null; sell_price: number | null; buy_volume: number | null; sell_volume: number | null; collected_at: string | null; buy_levels: MarketOrderLevel[]; sell_levels: MarketOrderLevel[]; history: MarketHistoryDay[]; history_summary: { days: number; total_volume: number; weighted_average: number | null } };
 type ImplantSet = { name: string; item_count: number; total_lp: number; lp_ratio: number | null; priced_count: number; market_value: number | null; items: { level: string; type_id: number; name: string; lp_cost: number; sell_price: number }[] };
 const MAX_CALCULATION_LP = 99_990_000;
+const LP_STORAGE_KEY = "eve-lp-calculator:lp";
+const OPTIMIZATION_STORAGE_KEY = "eve-lp-calculator:optimization";
 
 function ItemIcon({ typeId, name, size = 32, className = "" }: { typeId: number; name: string; size?: 32 | 64 | 128; className?: string }) {
   return <img className={`item-icon ${className}`.trim()} src={`/api/data/item-icon?type_id=${typeId}&size=${size}`} width={size} height={size} loading="lazy" decoding="async" alt={`${name}图标`} />;
@@ -86,10 +88,31 @@ export default function Home() {
   const [expandedOffers, setExpandedOffers] = useState<Set<string>>(new Set());
   const [optimizing, setOptimizing] = useState(false);
   const [optimization, setOptimization] = useState<OptimizationResult | null>(null);
+  const [storageReady, setStorageReady] = useState(false);
   const [marketTarget, setMarketTarget] = useState<{ typeId: number; name: string } | null>(null);
   const [marketSnapshot, setMarketSnapshot] = useState<MarketOrderSnapshot | null>(null);
   const [marketLoading, setMarketLoading] = useState(false);
   const marketTriggerRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    try {
+      const savedLp = Number(window.localStorage.getItem(LP_STORAGE_KEY));
+      if (Number.isFinite(savedLp) && savedLp >= 0) setLp(Math.min(MAX_CALCULATION_LP, savedLp));
+      const savedOptimization = window.localStorage.getItem(OPTIMIZATION_STORAGE_KEY);
+      if (savedOptimization) setOptimization(JSON.parse(savedOptimization) as OptimizationResult);
+    } catch { /* 浏览器禁用存储时仍保持页面计算可用 */ }
+    setStorageReady(true);
+  }, []);
+  useEffect(() => {
+    if (!storageReady) return;
+    try { window.localStorage.setItem(LP_STORAGE_KEY, String(Math.min(MAX_CALCULATION_LP, lp))); } catch { /* ignore */ }
+  }, [lp, storageReady]);
+  useEffect(() => {
+    if (!storageReady) return;
+    try {
+      if (optimization) window.localStorage.setItem(OPTIMIZATION_STORAGE_KEY, JSON.stringify(optimization));
+      else window.localStorage.removeItem(OPTIMIZATION_STORAGE_KEY);
+    } catch { /* ignore */ }
+  }, [optimization, storageReady]);
 
   const openMarket = useCallback((target: { typeId: number; name: string }, trigger: HTMLElement) => {
     marketTriggerRef.current = trigger;
