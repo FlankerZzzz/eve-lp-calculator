@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
-type SyncKind = "catalog" | "history" | "orders" | "linked" | "rankings";
+type SyncKind = "catalog" | "history" | "orders" | "rankings";
 type Job = {
   kind: SyncKind;
   status: "idle" | "running" | "paused" | "complete" | "error";
@@ -25,7 +25,6 @@ const labels: Record<SyncKind, { title: string; description: string }> = {
   catalog: { title: "基础资料", description: "势力、NPC 军团、中文物品名与 LP 商店兑换方案" },
   history: { title: "历史成交", description: "每 1 秒最多 50 项；市场历史成交均价、最高价、最低价与每日成交量" },
   orders: { title: "当前订单", description: "独立同步器异步并发 100 项；每 0.5 秒批量写入；产出物记录最高收单价和最低卖单价，需求材料使用最低卖单价" },
-  linked: { title: "关联同步", description: "同步 LP 产出物及全部关联材料的历史成交与当前订单" },
   rankings: { title: "首页榜单", description: "每天自动计算一次并固定保存；首页只读取快照，不现场计算" },
 };
 
@@ -82,7 +81,7 @@ export default function SyncPage() {
 
   return <main className="sync-page">
     <nav className="topbar">
-      <div className="brand"><span className="mark">✦</span><span>LP<span className="accent">/</span>同步控制台</span><small>晨曦 · SQLite/D1</small></div>
+      <div className="brand"><span className="mark">✦</span><span>LP<span className="accent">/</span>同步控制台</span><small>晨曦 · SQLite</small></div>
       <span className="database-state">{message}</span>
       <Link className="nav-action" href="/">返回收益分析 →</Link>
     </nav>
@@ -99,7 +98,7 @@ export default function SyncPage() {
     </section>
 
     <section className="job-grid">
-      {(["catalog", "history", "orders", "linked", "rankings"] as SyncKind[]).map((kind, index) => {
+      {(["catalog", "history", "orders", "rankings"] as SyncKind[]).map((kind, index) => {
         const job = jobMap.get(kind);
         const total = (job?.processed || 0) + (job?.remaining || 0);
         const percent = total ? (job?.processed || 0) / total * 100 : job?.status === "complete" ? 100 : 0;
@@ -113,7 +112,7 @@ export default function SyncPage() {
           {kind === "orders" && <div className="job-numbers"><span>全部订单物品 {counts.order_types || 0}</span><span>本轮同步总数 {(job?.processed || 0) + (job?.remaining || 0)}</span></div>}
           <dl><div><dt>当前阶段</dt><dd>{job?.phase || "—"}</dd></div><div><dt>最后接口</dt><dd>{job?.last_endpoint || "—"}</dd></div><div><dt>HTTP</dt><dd>{job?.last_http_status || "—"}</dd></div><div><dt>更新时间</dt><dd>{job?.updated_at ? new Date(job.updated_at).toLocaleString("zh-CN") : "—"}</dd></div></dl>
           {job?.error && <p className="job-error">{job.error}</p>}
-          <div className="job-buttons"><button className="run-button" disabled={pendingKind === kind || (!isRunning && activeKinds.length > 0 && !((kind === "linked" && activeKinds.every(active => active === "catalog")) || (kind === "catalog" && activeKinds.every(active => active === "linked"))))} onClick={() => control(kind, isRunning ? "pause" : "start")}>{pendingKind === kind ? "处理中…" : isRunning ? "暂停" : "恢复"}</button><button className="restart-button" disabled={pendingKind === kind || activeKinds.length > 0} onClick={() => control(kind, "restart")}>{kind === "rankings" ? "手动重算" : "重新同步"}</button></div>
+          <div className="job-buttons"><button className="run-button" disabled={pendingKind === kind || (!isRunning && activeKinds.length > 0)} onClick={() => control(kind, isRunning ? "pause" : "start")}>{pendingKind === kind ? "处理中…" : isRunning ? "暂停" : "恢复"}</button><button className="restart-button" disabled={pendingKind === kind || activeKinds.length > 0} onClick={() => control(kind, "restart")}>{kind === "rankings" ? "手动重算" : "重新同步"}</button></div>
         </article>;
       })}
     </section>

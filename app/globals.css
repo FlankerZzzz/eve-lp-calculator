@@ -98,6 +98,26 @@
 @media(pointer:coarse){button,a,input,select,summary{touch-action:manipulation}}
 @media(max-width:600px){.implant-exchange-panel{padding:20px 16px;margin:16px 0 22px}.implant-exchange-title{display:block}.implant-exchange-title span{display:block;margin-top:6px}.implant-exchange-metrics{grid-template-columns:1fr;gap:14px}.implant-exchange-metrics b{font-size:20px}}
 
+/* Desktop tables fit the viewport; horizontal scrolling is reserved for compact mobile layouts. */
+@media(min-width:761px){
+  .table-scroll{overflow-x:hidden}
+  .table .offer-grid,.table .offer-grid.row,.table .offer-grid.thead{
+    grid-template-columns:minmax(0,2.8fr) 52px repeat(9,minmax(0,1fr));
+    min-width:0;
+    gap:8px;
+    padding-left:12px;
+    padding-right:12px;
+  }
+  .table .offer-grid.thead{height:auto;min-height:44px;font-size:9px;line-height:1.25}
+  .table .offer-grid.row{min-height:68px;font-size:10px}
+  .table .offer-grid>span,.table .offer-grid>strong{min-width:0;overflow-wrap:anywhere}
+  .table .offer-grid .item,.table .offer-grid .item>div{min-width:0}
+  .table .offer-grid .item small{overflow-wrap:anywhere}
+  .material-panel{min-width:0;overflow:hidden;padding-left:18px;padding-right:12px}
+  .material-head,.material-row{grid-template-columns:78px minmax(0,2fr) 64px minmax(100px,1fr) minmax(100px,1fr) 76px;gap:8px}
+  .material-row>*{min-width:0;overflow-wrap:anywhere}
+}
+
 /* V1.2 — Deep-space flight deck visual system */
 :root{
   --bg:#05090e;

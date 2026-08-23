@@ -1,9 +1,9 @@
 import { ensureSchema } from "../../../../db/d1";
 import { updateSyncJob } from "../../../../db/sync-state";
 
-type SyncKind = "catalog" | "history" | "orders" | "linked" | "rankings";
+type SyncKind = "catalog" | "history" | "orders" | "rankings";
 
-const kinds = new Set<SyncKind>(["catalog", "history", "orders", "linked", "rankings"]);
+const kinds = new Set<SyncKind>(["catalog", "history", "orders", "rankings"]);
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({})) as { kind?: SyncKind; action?: "start" | "pause" | "restart" };
@@ -27,8 +27,7 @@ export async function POST(request: Request) {
   }
 
   const others = (await db.prepare("SELECT kind FROM sync_jobs WHERE status='running' AND kind != ?").bind(body.kind).all<{ kind: SyncKind }>()).results;
-  const compatible = (body.kind === "linked" && others.every(job => job.kind === "catalog")) || (body.kind === "catalog" && others.every(job => job.kind === "linked"));
-  if (others.length && !compatible) return Response.json({ error: `请先暂停正在运行的 ${others[0].kind} 同步` }, { status: 409 });
+  if (others.length) return Response.json({ error: `请先暂停正在运行的 ${others[0].kind} 同步` }, { status: 409 });
 
   const previous = await db.prepare("SELECT status, run_started_at, remaining FROM sync_jobs WHERE kind=?").bind(body.kind).first<{ status: string; run_started_at: string | null; remaining: number }>();
   const isResume = body.action !== "restart" && Boolean(previous?.run_started_at && ["paused", "error", "running"].includes(previous.status));

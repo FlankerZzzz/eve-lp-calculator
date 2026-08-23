@@ -23,6 +23,13 @@ test("首页只读取每日固定榜单快照", async () => {
   assert.doesNotMatch(route, /ORDER BY daily_volume DESC, lp_ratio DESC LIMIT 5/);
 });
 
+test("同步控制台不再提供关联同步", async () => {
+  const [page, control, status] = await Promise.all([source("app/sync/page.tsx"), source("app/api/sync/control/route.ts"), source("app/api/sync/status/route.ts")]);
+  assert.doesNotMatch(page, /linked|关联同步|SQLite\/D1/);
+  assert.doesNotMatch(control, /linked/);
+  assert.match(status, /kind != 'linked'/);
+});
+
 test("首页两个榜单使用独立且可切换的排序状态", async () => {
   const page = await source("app/page.tsx");
   assert.match(page, /setPopularSort.*key: "volume", direction: "desc"/);
