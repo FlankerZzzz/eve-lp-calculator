@@ -1,12 +1,30 @@
 services:
+  nginx:
+    build:
+      context: ./nginx
+    image: eve-lp-calculator-nginx
+    container_name: eve-lp-nginx
+    restart: unless-stopped
+    ports:
+      - "42981:42981"
+    depends_on:
+      web:
+        condition: service_healthy
+    networks:
+      - frontend
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+
   web:
     image: eve-lp-calculator-eve-lp-calculator
     build: .
     container_name: eve-lp-web
     restart: unless-stopped
     command: ["node", "scripts/web.mjs"]
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
       ESI_BASE_URL: https://ali-esi.evepc.163.com
       SQLITE_RUNTIME: "1"
@@ -17,10 +35,18 @@ services:
     volumes:
       - ./docker-data/wrangler:/app/.wrangler
       - ./docker-data/sqlite:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - frontend
+      - backend
 
   sync-worker:
     image: eve-lp-calculator-eve-lp-calculator
-    build: .
     container_name: eve-lp-sync-worker
     restart: unless-stopped
     command: ["node", "scripts/sync-worker.mjs"]
@@ -33,10 +59,11 @@ services:
       - ./docker-data/sqlite:/data
     depends_on:
       - sync-api
+    networks:
+      - backend
 
   order-sync:
     image: eve-lp-calculator-eve-lp-calculator
-    build: .
     container_name: eve-lp-order-sync
     restart: unless-stopped
     command: ["node", "scripts/order-sync-daemon.mjs"]
@@ -45,10 +72,11 @@ services:
       ESI_BASE_URL: https://ali-esi.evepc.163.com
     volumes:
       - ./docker-data/sqlite:/data
+    networks:
+      - backend
 
   sync-api:
     image: eve-lp-calculator-eve-lp-calculator
-    build: .
     container_name: eve-lp-sync-api
     restart: unless-stopped
     command: ["node", "scripts/web.mjs"]
@@ -59,3 +87,13 @@ services:
       ESI_BASE_URL: https://ali-esi.evepc.163.com
     volumes:
       - ./docker-data/sqlite:/data
+    expose:
+      - "3001"
+    networks:
+      - backend
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge

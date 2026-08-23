@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-当前基线版本：`V1.0`
+当前基线版本：`V1.1`
 
 版本更新记录统一维护在 [`VERSION.md`](./VERSION.md)。后续功能更新应同步修改网页底部版本号和版本记录。
 
@@ -160,15 +160,15 @@ ESI_BASE_URL=https://ali-esi.evepc.163.com
 | `/api/sync/rankings` | POST | 手动重算首页榜单 |
 | `/api/sync/control` | POST | 暂停、恢复和重新同步 |
 
-如果通过 Nginx 使用：
+生产部署已在 `docker-compose.yml` 中包含 Nginx 网关：
 
-```nginx
-location / {
-    proxy_pass http://127.0.0.1:3000;
-}
+```text
+客户端 -> 宿主机 42981 -> eve-lp-nginx:42981 -> eve-lp-web:3000
 ```
 
-那么 `/api/sync/*` 也会随 `/` 一起被反代。仅隐藏 `/sync` 页面不能保护接口，公网部署时应至少使用 IP 白名单、VPN 或应用层登录鉴权，并确保 3000 端口不直接暴露公网。
+Web 容器的 3000 端口只通过 Docker 内部网桥向 Nginx 开放，不再映射到宿主机。Nginx 根据 TCP 连接的真实来源地址判断内外网：RFC 1918、IPv4/IPv6 回环、IPv6 ULA 和链路本地地址可以访问 `/sync`、`/sync/*`、`/api/sync` 与 `/api/sync/*`；公网来源返回带深空检查站主题的 HTTP 403 页面。不要直接信任客户端提供的 `X-Forwarded-For`。
+
+如果未来在 Nginx 前再增加 Cloudflare、负载均衡器或其他反向代理，必须先为固定代理地址配置 Nginx Real IP 信任链，否则 Nginx 看到的是代理地址，内外网判断将不符合预期。
 
 ## 数据和计算口径
 
@@ -184,8 +184,8 @@ location / {
 
 如果服务只在内网使用，风险较低；如果通过公网域名访问，建议：
 
-1. Nginx 只反代 80/443，关闭公网直连 3000。
-2. 对 `/sync` 和 `/api/sync/*` 使用 IP 白名单或 VPN。
+1. 只公开 Nginx 的 42981 端口，不要恢复 Web 容器的宿主机端口映射。
+2. `/sync` 和 `/api/sync/*` 默认只允许私有网络来源；跨公网管理时优先使用 VPN。
 3. 进一步增加应用层管理员密码，使用 HttpOnly Cookie。
 4. 对同步 POST 接口增加 CSRF 防护和失败限流。
 5. `.env`、数据库文件和备份文件不要提交到仓库。

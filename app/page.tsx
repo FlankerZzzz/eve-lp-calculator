@@ -25,7 +25,7 @@ type MarketHistoryDay = { trade_date: string; average_price: number; highest_pri
 type MarketOrderSnapshot = { type_id: number; item_name: string; buy_price: number | null; sell_price: number | null; buy_volume: number | null; sell_volume: number | null; collected_at: string | null; buy_levels: MarketOrderLevel[]; sell_levels: MarketOrderLevel[]; history: MarketHistoryDay[]; history_summary: { days: number; total_volume: number; weighted_average: number | null } };
 type ImplantSet = { name: string; item_count: number; total_lp: number; lp_ratio: number | null; priced_count: number; market_value: number | null; items: { level: string; type_id: number; name: string; lp_cost: number; sell_price: number }[] };
 const MAX_CALCULATION_LP = 99_990_000;
-const APP_VERSION = "V1.0";
+const APP_VERSION = "V1.1";
 const LP_STORAGE_KEY = "eve-lp-calculator:lp";
 const OPTIMIZATION_STORAGE_KEY = "eve-lp-calculator:optimization";
 
