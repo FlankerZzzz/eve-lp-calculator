@@ -25,7 +25,7 @@ type MarketHistoryDay = { trade_date: string; average_price: number; highest_pri
 type MarketOrderSnapshot = { type_id: number; item_name: string; buy_price: number | null; sell_price: number | null; buy_volume: number | null; sell_volume: number | null; collected_at: string | null; buy_levels: MarketOrderLevel[]; sell_levels: MarketOrderLevel[]; history: MarketHistoryDay[]; history_summary: { days: number; total_volume: number; weighted_average: number | null } };
 type ImplantSet = { name: string; item_count: number; total_lp: number; lp_ratio: number | null; priced_count: number; market_value: number | null; items: { level: string; type_id: number; name: string; lp_cost: number; sell_price: number }[] };
 const MAX_CALCULATION_LP = 99_990_000;
-const APP_VERSION = "V1.1";
+const APP_VERSION = "V1.2";
 const LP_STORAGE_KEY = "eve-lp-calculator:lp";
 const OPTIMIZATION_STORAGE_KEY = "eve-lp-calculator:optimization";
 
@@ -369,8 +369,32 @@ export default function Home() {
   const implantExchangeRows = implantSets.map(set => ({ set, count: Math.floor(lp / set.total_lp) })).filter(({ set, count }) => set.total_lp > 0 && set.market_value !== null && set.lp_ratio !== null && count > 0);
   const implantExchangePanel = implantExchangeRows.length ? <section className="implant-exchange-panel"><div className="implant-exchange-head"><div><p className="eyebrow">当前 LP 整套兑换估算</p><h3>可兑换的完整脑插套装</h3><span>按每套总 LP 计算，价值按六件当前最高收单价合计</span></div></div><div className="implant-exchange-list">{implantExchangeRows.map(({ set, count }) => { const usedLp = set.total_lp * count; const value = (set.market_value || 0) * count; return <div className="implant-exchange-card" key={set.name}><div className="implant-exchange-title"><strong>可兑换 {formatNumber(count)} 套{set.name}套</strong><span>每套 {formatNumber(set.total_lp)} LP</span></div><div className="implant-exchange-metrics"><div><small>套装总价值</small><b>{formatNumber(value)} ISK</b><em>约 {magnitudeHint(value)} ISK</em></div><div><small>整套 LP 比例</small><b>{formatNumber(set.lp_ratio!)} ISK/LP</b><em>按扣除税费和成本后的净利润计算</em></div><div><small>剩余 LP</small><b>{formatNumber(lp - usedLp)} LP</b><em>已使用 {formatNumber(usedLp)} LP</em></div></div></div>; })}</div></section> : null;
 
-  return <main>
+  return <main className="home-page">
     <nav className="topbar"><div className="brand"><span className="mark">✦</span><span>LP<span className="accent">/</span>换算器</span><small>晨曦 · 本地数据库</small></div><span className="database-state">{status}</span><a className="nav-action" href="/sync">数据同步 →</a></nav>
+
+    <section className="command-hero">
+      <div className="command-copy">
+        <div className="hero-kicker"><span>NEW EDEN MARKET INTELLIGENCE</span><i>SECURE CHANNEL 7</i></div>
+        <h1><span>忠诚点</span><em>战术收益终端</em></h1>
+        <p>连接新伊甸市场情报，在舰队出港前完成 LP 兑换、税后利润与资源组合推演。</p>
+        <div className="hero-tags"><span>EVE DATA CORE</span><span>QUANTUM LINK</span><span>STARFLEET LCARS</span></div>
+      </div>
+      <div className="orbital-display" aria-hidden="true">
+        <div className="orbit orbit-one" />
+        <div className="orbit orbit-two" />
+        <div className="orbit orbit-three" />
+        <div className="nav-reticle"><span>ISK</span><b>/</b><span>LP</span><small>YIELD VECTOR</small></div>
+        <i className="contact contact-a" /><i className="contact contact-b" /><i className="contact contact-c" />
+        <div className="orbit-caption caption-a">JITA // 4-4</div><div className="orbit-caption caption-b">VECTOR 03.71</div>
+      </div>
+    </section>
+
+    <section className="telemetry-strip" aria-label="终端状态">
+      <div><span>DATA LINK</span><b>LOCAL SQLITE</b><i>CONNECTED</i></div>
+      <div><span>MARKET WINDOW</span><b>{windowDays} DAYS</b><i>ROLLING</i></div>
+      <div><span>TAX PROFILE</span><b>{tax.toFixed(1)}%</b><i>ACTIVE</i></div>
+      <div><span>NAV STATUS</span><b>{loading ? "SCANNING" : "ONLINE"}</b><i>{loading ? "ACQUIRING" : "NOMINAL"}</i></div>
+    </section>
 
     <section className="results"><div className="section-head"><div><p className="eyebrow">{corporationId ? "企业详情" : "数据库榜单"}</p><h2>{corporationId ? "全部兑换方案" : "精选兑换方案"}</h2><p className="sub">{corporationId ? "具体企业使用数据库分页查询" : "仅在全部企业时展示两个前二十榜单，不加载全量数据"} · {windowDays} 日历史成交 · 税率 {tax}%</p></div><div className="filters"><input aria-label="搜索物品" placeholder="⌕  搜索当前结果" value={query} onChange={event => setQuery(event.target.value)} /><div className="corporation-picker"><button className="picker-trigger" type="button" aria-expanded={corporationPickerOpen} onClick={() => { const opening = !corporationPickerOpen; setCorporationPickerOpen(opening); if (opening && !pickerFactionId) setPickerFactionId(factionId || corporationGroups[0]?.faction_id || 0); }}><span>{selectedFaction?.name || "全部势力"} <b>/</b> {selectedCorporation?.name || "全部企业"}</span><i>{corporationPickerOpen ? "⌃" : "⌄"}</i></button>{corporationPickerOpen && <div className="picker-menu"><div className="picker-search"><input aria-label="搜索企业" autoFocus placeholder="输入企业中文或英文名" value={corporationSearchInput} onChange={event => setCorporationSearchInput(event.target.value)} onKeyDown={event => { if (event.key === "Enter") applyCorporationSearch(); }} /><button type="button" onClick={applyCorporationSearch}>搜索</button></div><div className="picker-columns"><div className="faction-list"><button className={!factionId && !corporationId ? "selected" : ""} type="button" onClick={() => { setFactionId(0); setCorporationId(0); setCorporationPickerOpen(false); setPage(1); }}>全部势力与企业 <span>›</span></button>{corporationGroups.map(group => <button className={pickerFactionId === group.faction_id ? "active" : ""} type="button" key={group.faction_id} onClick={() => setPickerFactionId(group.faction_id)}><EntityIcon id={group.faction_id} name={group.name} kind="faction" /><b className="entity-name">{group.name}</b><small>{group.corporations.length}</small><span>›</span></button>)}{ungroupedCorporations.length > 0 && <button className={pickerFactionId === 0 ? "active" : ""} type="button" onClick={() => setPickerFactionId(0)}>其他企业<small>{ungroupedCorporations.length}</small><span>›</span></button>}</div><div className="corporation-list">{pickerCorporations.length ? pickerCorporations.map(corporation => <button className={corporationId === corporation.corporation_id ? "selected" : ""} type="button" key={corporation.corporation_id} onClick={() => { setFactionId(corporation.faction_id || 0); setCorporationId(corporation.corporation_id); setCorporationPickerOpen(false); setPage(1); }}><EntityIcon id={corporation.corporation_id} name={corporation.name} kind="corporation" /><b className="entity-name">{corporation.name}</b><small>{corporation.offer_count} 个方案</small></button>) : <p>该分类暂无匹配企业</p>}</div></div></div>}</div>{corporationId > 0 && <select aria-label="每页数量" value={pageSize} onChange={event => { setPageSize(event.target.value); setPage(1); }}><option value="10">每页 10 条</option><option value="20">每页 20 条</option><option value="50">每页 50 条</option><option value="all">全部数据</option></select>}</div></div>
       {corporationId ? <>{corporationCalculator}{implantExchangePanel}{implantSetPanel}{boosterBlueprintToggle}{detailTable}{pageSize !== "all" && <div className="pagination"><button disabled={page <= 1} onClick={() => setPage(value => Math.max(1, value - 1))}>上一页</button><span>第 {page} / {detailPages} 页</span><button disabled={page >= detailPages} onClick={() => setPage(value => Math.min(detailPages, value + 1))}>下一页</button></div>}</> : <>{boosterBlueprintToggle}{rankingTable("热门物品榜", "前 100 条 · 按 30 日内日均交易量", visiblePopular, popularSort, key => toggleTableSort(setPopularSort, key), false)}{rankingPager("热门榜", popularPage, popularPageCount, setPopularPage)}{rankingTable("高比率榜", "前 100 条 · 按最高收单价计算的税后单位 LP 利润", visibleRatio, ratioSort, key => toggleTableSort(setRatioSort, key), false)}{rankingPager("高比率榜", ratioPage, ratioPageCount, setRatioPage)}</>}

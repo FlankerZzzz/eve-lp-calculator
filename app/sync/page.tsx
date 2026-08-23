@@ -87,7 +87,7 @@ export default function SyncPage() {
       <Link className="nav-action" href="/">返回收益分析 →</Link>
     </nav>
 
-    <header className="sync-header"><div><p className="eyebrow">/SYNC</p><h1>数据同步状态</h1><p>同步循环运行在本地服务端。刷新或关闭网页不会中断作业；只有关闭 3000 端口服务才会停止。每次仅执行一个保守的小批次。</p></div><button className={`invalid-toggle ${showInvalid ? "active" : ""}`} onClick={() => setShowInvalid(value => !value)}>{showInvalid ? "隐藏无效数据" : `显示无效数据（${counts.invalid_items}）`}</button></header>
+    <header className="sync-header"><div><div className="hero-kicker"><span>SUBSPACE DATA OPERATIONS</span><i>PRIVATE NETWORK</i></div><p className="eyebrow">/SYNC</p><h1>数据同步状态</h1><p>同步循环运行在本地服务端。刷新或关闭网页不会中断作业；只有关闭 3000 端口服务才会停止。每次仅执行一个保守的小批次。</p></div><button className={`invalid-toggle ${showInvalid ? "active" : ""}`} onClick={() => setShowInvalid(value => !value)}>{showInvalid ? "隐藏无效数据" : `显示无效数据（${counts.invalid_items}）`}</button></header>
 
     <section className="metric-grid">
       <div><span>军团</span><strong>{counts.corporation_synced}<small> / {counts.corporation_total}</small></strong></div>
