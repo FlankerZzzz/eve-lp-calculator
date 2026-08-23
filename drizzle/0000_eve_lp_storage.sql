@@ -1,0 +1,15 @@
+CREATE TABLE `factions` (`faction_id` integer PRIMARY KEY NOT NULL, `name` text NOT NULL, `updated_at` text NOT NULL);
+CREATE TABLE `corporations` (`corporation_id` integer PRIMARY KEY NOT NULL, `faction_id` integer, `name` text NOT NULL, `name_synced_at` text, `offers_synced_at` text, `updated_at` text NOT NULL);
+CREATE TABLE `item_types` (`type_id` integer PRIMARY KEY NOT NULL, `name_zh` text, `name_en` text, `history_synced_at` text, `order_synced_at` text, `updated_at` text NOT NULL);
+CREATE TABLE `lp_offers` (`corporation_id` integer NOT NULL, `offer_id` integer NOT NULL, `type_id` integer NOT NULL, `quantity` integer NOT NULL, `lp_cost` integer NOT NULL, `isk_cost` real NOT NULL, `ak_cost` integer DEFAULT 0 NOT NULL, `updated_at` text NOT NULL, PRIMARY KEY(`corporation_id`, `offer_id`));
+CREATE TABLE `lp_offer_materials` (`corporation_id` integer NOT NULL, `offer_id` integer NOT NULL, `type_id` integer NOT NULL, `quantity` integer NOT NULL, PRIMARY KEY(`corporation_id`, `offer_id`, `type_id`));
+CREATE TABLE `market_daily` (`region_id` integer NOT NULL, `type_id` integer NOT NULL, `trade_date` text NOT NULL, `average_price` real NOT NULL, `highest_price` real NOT NULL, `lowest_price` real NOT NULL, `volume` integer NOT NULL, PRIMARY KEY(`region_id`, `type_id`, `trade_date`));
+CREATE TABLE `market_orders` (`region_id` integer NOT NULL, `type_id` integer NOT NULL, `buy_price` real NOT NULL, `sell_price` real NOT NULL, `buy_volume` integer NOT NULL, `sell_volume` integer NOT NULL, `collected_at` text NOT NULL, PRIMARY KEY(`region_id`, `type_id`));
+CREATE TABLE `sync_runs` (`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL, `kind` text NOT NULL, `status` text NOT NULL, `detail` text, `started_at` text NOT NULL, `finished_at` text);
+CREATE TABLE `sync_jobs` (`kind` text PRIMARY KEY NOT NULL, `status` text NOT NULL, `phase` text, `run_started_at` text, `processed` integer DEFAULT 0 NOT NULL, `remaining` integer DEFAULT 0 NOT NULL, `last_endpoint` text, `last_http_status` integer, `last_response` text, `error` text, `updated_at` text NOT NULL);
+CREATE TABLE `sync_events` (`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL, `kind` text NOT NULL, `phase` text, `endpoint` text, `http_status` integer, `response` text, `created_at` text NOT NULL);
+CREATE INDEX `idx_corporations_faction` ON `corporations` (`faction_id`);
+CREATE INDEX `idx_lp_offers_corporation` ON `lp_offers` (`corporation_id`);
+CREATE INDEX `idx_lp_offers_type` ON `lp_offers` (`type_id`);
+CREATE INDEX `idx_market_daily_type_date` ON `market_daily` (`region_id`,`type_id`,`trade_date`);
+CREATE INDEX `idx_sync_events_created` ON `sync_events` (`created_at`);
