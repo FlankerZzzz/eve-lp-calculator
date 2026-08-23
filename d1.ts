@@ -1,5 +1,5 @@
 import { getSqlite } from "./sqlite";
-const env = (globalThis as any).env ?? {};
+const env = (globalThis as { env?: { DB?: D1Database } }).env ?? {};
 
 export function getD1(): D1Database {
   if (process.env.SQLITE_RUNTIME === "1") return getSqlite();

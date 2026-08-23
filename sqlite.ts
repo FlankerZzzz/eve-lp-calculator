@@ -1,10 +1,10 @@
 // Small D1-compatible facade backed by a persistent SQLite file for Node/Docker.
 // Keeping the D1-shaped API lets existing routes and sync code run unchanged.
-// @ts-ignore better-sqlite3 ships its runtime separately from TypeScript types.
+// @ts-expect-error better-sqlite3 does not ship declarations in this runtime package.
 import Database from "better-sqlite3";
 
 const filename = process.env.SQLITE_PATH || ".data/eve-lp.db";
-let instance: any;
+let instance: InstanceType<typeof Database> | null = null;
 
 function db() {
   if (!instance) {
@@ -19,13 +19,13 @@ class Statement {
   private values: unknown[] = [];
   constructor(private readonly sql: string) {}
   bind(...values: unknown[]) { this.values = values; return this; }
-  async first<T = Record<string, unknown>>() { return (db().prepare(this.sql).get(...this.values) as T | undefined) ?? null; }
-  async all<T = Record<string, unknown>>() { return { results: db().prepare(this.sql).all(...this.values) as T[], success: true }; }
-  async raw<T = unknown[]>() { return db().prepare(this.sql).raw().all(...this.values) as T[]; }
-  async run() { const info = db().prepare(this.sql).run(...this.values); return { results: [], success: true, meta: info }; }
+  async first<T = Record<string, unknown>>() { return (db().prepare(this.sql).get(...this.values as never[]) as T | undefined) ?? null; }
+  async all<T = Record<string, unknown>>() { return { results: db().prepare(this.sql).all(...this.values as never[]) as T[], success: true }; }
+  async raw<T = unknown[]>() { return db().prepare(this.sql).raw().all(...this.values as never[]) as T[]; }
+  async run() { const info = db().prepare(this.sql).run(...this.values as never[]); return { results: [], success: true, meta: info }; }
 }
 
-export function getSqlite() {
+export function getSqlite(): D1Database {
   return {
     prepare(sql: string) { return new Statement(sql); },
     async batch(statements: Statement[]) {
@@ -34,5 +34,5 @@ export function getSqlite() {
       return statements.map(() => ({ results: [], success: true }));
     },
     async exec(sql: string) { db().exec(sql); },
-  } as any;
+  } as unknown as D1Database;
 }

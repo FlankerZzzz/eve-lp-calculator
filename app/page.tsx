@@ -30,6 +30,8 @@ const LP_STORAGE_KEY = "eve-lp-calculator:lp";
 const OPTIMIZATION_STORAGE_KEY = "eve-lp-calculator:optimization";
 
 function ItemIcon({ typeId, name, size = 32, className = "" }: { typeId: number; name: string; size?: 32 | 64 | 128; className?: string }) {
+  // The icon endpoint controls caching and supplies a validated local image response.
+  // eslint-disable-next-line @next/next/no-img-element
   return <img className={`item-icon ${className}`.trim()} src={`/api/data/item-icon?type_id=${typeId}&size=${size}`} width={size} height={size} loading="lazy" decoding="async" alt={`${name}图标`} />;
 }
 
@@ -38,6 +40,8 @@ const NPC_CORPORATION_FACTION_FALLBACKS = new Map([[1000437, 500010]]);
 function EntityIcon({ id, name, kind }: { id: number; name: string; kind: "faction" | "corporation" }) {
   const fallbackFactionId = kind === "corporation" ? NPC_CORPORATION_FACTION_FALLBACKS.get(id) : undefined;
   const factionFallback = fallbackFactionId ? `&fallback_faction_id=${fallbackFactionId}` : "";
+  // The icon endpoint controls caching and supplies a validated local image response.
+  // eslint-disable-next-line @next/next/no-img-element
   return <img className="entity-icon" src={`/api/data/entity-icon?kind=${kind}&id=${id}&size=64${factionFallback}`} width={32} height={32} loading="lazy" decoding="async" alt={`${name}徽标`} />;
 }
 

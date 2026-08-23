@@ -19,7 +19,11 @@ services:
 
   web:
     image: eve-lp-calculator-eve-lp-calculator
-    build: .
+    build:
+      context: .
+      args:
+        HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
     container_name: eve-lp-web
     restart: unless-stopped
     command: ["node", "scripts/web.mjs"]

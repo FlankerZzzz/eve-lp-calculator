@@ -11,7 +11,7 @@ type CacheRef = { hash: string; contentType: string };
 
 const fallbackSvg = (size: number) => `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 64 64"><rect width="64" height="64" rx="6" fill="#131b21"/><path d="M20 18h24v28H20z" fill="none" stroke="#53626d" stroke-width="2"/><path d="M25 27h14M25 33h14M25 39h9" stroke="#53626d" stroke-width="2"/><circle cx="42" cy="43" r="8" fill="#172a25" stroke="#55e6bd" stroke-width="2"/><path d="M42 39v8M38 43h8" stroke="#55e6bd" stroke-width="2"/></svg>`;
 
-const imageResponse = (body: BodyInit, contentType: string, source: string) => new Response(body, {
+const imageResponse = (body: BodyInit | Buffer, contentType: string, source: string) => new Response(body as unknown as BodyInit, {
   headers: {
     "content-type": contentType,
     "cache-control": source === "fallback" ? "public, max-age=300" : "public, max-age=604800, immutable",
