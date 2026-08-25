@@ -24,6 +24,17 @@ test("首页只读取每日固定榜单快照", async () => {
   assert.doesNotMatch(route, /ORDER BY daily_volume DESC, lp_ratio DESC LIMIT 5/);
 });
 
+test("订单深度不足时保留利润估算并显示材料与收单风险", async () => {
+  const page = await source("app/page.tsx");
+  assert.match(page, /const maxProfit = offer\.sell_price > 0 \?/);
+  assert.match(page, /const minProfit = immediateBuyPrice > 0 \?/);
+  assert.match(page, /coverage-shortage/);
+  assert.doesNotMatch(page, /风险估算/);
+  assert.match(page, /收单不足/);
+  assert.match(page, /卖单不足 · 请核对实际订单情况，避免无法兑换/);
+  assert.match(page, /offer\.materialsCovered && offer\.outputCovered/);
+});
+
 test("订单使用伏尔戈全量双槽快照并按半小时调度", async () => {
   const [daemon, worker, schema] = await Promise.all([source("scripts/order-sync-daemon.mjs"), source("scripts/sync-worker.mjs"), source("db/d1.ts")]);
   assert.match(daemon, /order_type=all&page=\$\{page\}/);
