@@ -95,7 +95,6 @@ export function summarizeOrders(orders: MarketOrder[]) {
     for (const order of source) grouped.set(order.price, (grouped.get(order.price) ?? 0) + order.volume_remain);
     return [...grouped.entries()]
       .sort(([left], [right]) => direction === "asc" ? left - right : right - left)
-      .slice(0, 5)
       .map(([price, volume], index) => ({ level: index + 1, price, volume }));
   };
   return {

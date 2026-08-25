@@ -5,14 +5,46 @@ import { MARKET_REGION_ID } from "../../../../lib/esi-server";
 type OfferRow = {
   corporation_id: number; offer_id: number; type_id: number; quantity: number; lp_cost: number; isk_cost: number;
   corporation_name: string; faction_id: number | null; faction_name: string | null; item_name: string;
-  historical_price: number; daily_volume: number; buy_price: number; sell_price: number; material_total: number;
+  historical_price: number; history_30: number; history_15: number; history_7: number; history_3: number; history_1: number;
+  daily_volume: number; buy_price: number; sell_price: number; material_total: number;
   lp_ratio: number | null; max_profit: number | null; min_profit: number | null; pricing_complete: number; missing_price_count: number;
   is_blueprint: number; product_type_id: number | null; product_name: string | null; revenue_quantity: number; duplicate_rank: number;
   exchange_signature?: string; manufacturing_signature?: string;
 };
-type MaterialRow = { corporation_id: number; offer_id: number; type_id: number; quantity: number; item_name: string; buy_price: number; sell_price: number; material_kind: string };
+type HistoryPrices = { 30: number; 15: number; 7: number; 3: number; 1: number };
+type MaterialRow = { corporation_id: number; offer_id: number; type_id: number; quantity: number; item_name: string; buy_price: number; sell_price: number; material_kind: string; historical_prices?: HistoryPrices; sell_execution_price?: number; sell_execution_coverage?: number };
+type OrderLevelRow = { type_id: number; side: "buy" | "sell"; price: number; volume: number };
+type HistoryRow = { type_id: number; trade_date: string; average_price: number; volume: number };
+type DailyVolumePoint = { trade_date: string; volume: number };
 type ImplantSetRow = { type_id: number; name_en: string; name_zh: string | null; buy_price: number; sell_price: number; lp_cost: number; isk_cost: number; material_cost: number };
 const finiteNumber = (value: string | null, fallback: number) => value === null || value.trim() === "" ? fallback : Number(value);
+const HISTORY_WINDOWS = [30, 15, 7, 3, 1] as const;
+const emptyHistory = (): HistoryPrices => ({ 30: 0, 15: 0, 7: 0, 3: 0, 1: 0 });
+const chinaDate = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+const historyCutoff = (days: number, anchorDate = chinaDate()) => {
+  const date = new Date(`${anchorDate}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - (days - 1));
+  return date.toISOString().slice(0, 10);
+};
+const historyDates = (anchorDate: string, days: number) => Array.from({ length: days }, (_, index) => {
+  const date = new Date(`${anchorDate}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - (days - 1 - index));
+  return date.toISOString().slice(0, 10);
+});
+const executionPrice = (levels: OrderLevelRow[], quantity: number) => {
+  if (quantity <= 0 || !levels.length) return { price: 0, coverage: 0 };
+  let remaining = quantity;
+  let filled = 0;
+  let value = 0;
+  for (const level of levels) {
+    const taken = Math.min(remaining, level.volume);
+    filled += taken;
+    value += taken * level.price;
+    remaining -= taken;
+    if (remaining <= 0) break;
+  }
+  return { price: filled > 0 ? value / filled : 0, coverage: Math.min(1, filled / quantity) };
+};
 
 export async function GET(request: Request) {
   const db = await ensureSchema();
@@ -31,7 +63,9 @@ export async function GET(request: Request) {
   const sortKey = url.searchParams.get("sort_key") || "lpRatio";
   const sortDirection = url.searchParams.get("sort_direction") === "asc" ? "ASC" : "DESC";
   const includeBoosterBlueprints = url.searchParams.get("include_booster_blueprints") === "1";
-  const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const latestHistoryDate = (await db.prepare("SELECT MAX(trade_date) AS date FROM market_daily WHERE region_id=?").bind(MARKET_REGION_ID).first<{ date: string | null }>())?.date ?? chinaDate();
+  const cutoff = historyCutoff(days, latestHistoryDate);
+  const historyCutoffs = Object.fromEntries(HISTORY_WINDOWS.map(window => [window, historyCutoff(window, latestHistoryDate)])) as Record<(typeof HISTORY_WINDOWS)[number], string>;
   const filters: number[] = [];
   const conditions: string[] = [];
   if (factionId) { conditions.push("c.faction_id = ?"); filters.push(factionId); }
@@ -47,7 +81,12 @@ export async function GET(request: Request) {
   const baseSql = `
     WITH recent AS (
       SELECT type_id, COALESCE(SUM(average_price * volume) / NULLIF(SUM(volume), 0), 0) historical_price,
-        COALESCE(AVG(volume), 0) daily_volume
+        COALESCE(SUM(CASE WHEN trade_date >= ? THEN average_price * volume ELSE 0 END) / NULLIF(SUM(CASE WHEN trade_date >= ? THEN volume ELSE 0 END), 0), 0) history_30,
+        COALESCE(SUM(CASE WHEN trade_date >= ? THEN average_price * volume ELSE 0 END) / NULLIF(SUM(CASE WHEN trade_date >= ? THEN volume ELSE 0 END), 0), 0) history_15,
+        COALESCE(SUM(CASE WHEN trade_date >= ? THEN average_price * volume ELSE 0 END) / NULLIF(SUM(CASE WHEN trade_date >= ? THEN volume ELSE 0 END), 0), 0) history_7,
+        COALESCE(SUM(CASE WHEN trade_date >= ? THEN average_price * volume ELSE 0 END) / NULLIF(SUM(CASE WHEN trade_date >= ? THEN volume ELSE 0 END), 0), 0) history_3,
+        COALESCE((SELECT md2.average_price FROM market_daily md2 WHERE md2.region_id = ? AND md2.type_id = market_daily.type_id ORDER BY md2.trade_date DESC LIMIT 1), 0) history_1,
+        COALESCE(SUM(volume) / ?, 0) daily_volume
       FROM market_daily WHERE trade_date >= ? AND region_id = ? GROUP BY type_id
     ), exchange_material AS (
       SELECT m.corporation_id, m.offer_id, SUM(m.quantity * COALESCE(mo.sell_price, 0)) material_total,
@@ -63,7 +102,10 @@ export async function GET(request: Request) {
       SELECT o.corporation_id, o.offer_id, o.type_id, o.quantity, o.lp_cost, o.isk_cost,
         c.name corporation_name, c.faction_id, f.name faction_name,
         COALESCE(t.name_zh, t.name_en, '物品 ' || o.type_id) item_name,
-        COALESCE(r.historical_price, 0) historical_price, COALESCE(r.daily_volume, 0) daily_volume,
+        COALESCE(r.historical_price, 0) historical_price,
+        COALESCE(r.history_30, 0) history_30, COALESCE(r.history_15, 0) history_15,
+        COALESCE(r.history_7, 0) history_7, COALESCE(r.history_3, 0) history_3, COALESCE(r.history_1, 0) history_1,
+        COALESCE(r.daily_volume, 0) daily_volume,
         COALESCE(CASE WHEN br.blueprint_type_id IS NOT NULL THEN pmo.buy_price ELSE mo.buy_price END, 0) buy_price,
         COALESCE(CASE WHEN br.blueprint_type_id IS NOT NULL THEN pmo.sell_price ELSE mo.sell_price END, 0) sell_price,
         COALESCE(em.material_total, 0) + COALESCE(mm.material_total, 0) * o.quantity material_total,
@@ -91,7 +133,11 @@ export async function GET(request: Request) {
     FROM calculated`;
 
   const multiplier = 1 - tax / 100;
-  const bindings = [cutoff, MARKET_REGION_ID, MARKET_REGION_ID, ...filters, multiplier, multiplier, multiplier];
+  const bindings = [
+    historyCutoffs[30], historyCutoffs[30], historyCutoffs[15], historyCutoffs[15], historyCutoffs[7], historyCutoffs[7],
+    historyCutoffs[3], historyCutoffs[3], MARKET_REGION_ID, days, cutoff, MARKET_REGION_ID, MARKET_REGION_ID,
+    ...filters, multiplier, multiplier, multiplier,
+  ];
   const loadMaterials = async (offers: OfferRow[]) => {
     const map = new Map<string, MaterialRow[]>();
     if (!offers.length) return map;
@@ -119,7 +165,83 @@ export async function GET(request: Request) {
     }
     return map;
   };
-  const hydrate = (offers: OfferRow[], materials: Map<string, MaterialRow[]>) => offers.map(offer => ({ ...offer, materials: materials.get(`${offer.corporation_id}:${offer.offer_id}`) ?? [] }));
+  const loadHistoryData = async (typeIds: number[]) => {
+    const priceMap = new Map<number, HistoryPrices>();
+    const volumes = new Map<number, DailyVolumePoint[]>();
+    const volumeDates = historyDates(latestHistoryDate, 30);
+    const unique = [...new Set(typeIds)];
+    for (let index = 0; index < unique.length; index += 400) {
+      const batch = unique.slice(index, index + 400);
+      const placeholders = batch.map(() => "?").join(",");
+      const rows = (await db.prepare(`SELECT type_id, trade_date, average_price, volume FROM market_daily WHERE region_id=? AND trade_date>=? AND type_id IN (${placeholders})`).bind(MARKET_REGION_ID, historyCutoffs[30], ...batch).all<HistoryRow>()).results;
+      const totals = new Map<number, Record<number, { value: number; volume: number }>>();
+      const latest = new Map<number, HistoryRow>();
+      const dailyByType = new Map<number, Map<string, number>>();
+      for (const row of rows) {
+        const previousLatest = latest.get(row.type_id);
+        if (!previousLatest || row.trade_date > previousLatest.trade_date) latest.set(row.type_id, row);
+        const windows = totals.get(row.type_id) ?? Object.fromEntries(HISTORY_WINDOWS.map(window => [window, { value: 0, volume: 0 }]));
+        for (const window of HISTORY_WINDOWS) if (window !== 1 && row.trade_date >= historyCutoffs[window]) {
+          windows[window].value += row.average_price * row.volume;
+          windows[window].volume += row.volume;
+        }
+        totals.set(row.type_id, windows);
+        const daily = dailyByType.get(row.type_id) ?? new Map<string, number>();
+        daily.set(row.trade_date, row.volume);
+        dailyByType.set(row.type_id, daily);
+      }
+      for (const typeId of batch) {
+        const windowPrices = emptyHistory();
+        const totalsForType = totals.get(typeId);
+        for (const window of HISTORY_WINDOWS) windowPrices[window] = window === 1
+          ? latest.get(typeId)?.average_price ?? 0
+          : totalsForType?.[window].volume ? totalsForType[window].value / totalsForType[window].volume : 0;
+        priceMap.set(typeId, windowPrices);
+        const daily = dailyByType.get(typeId);
+        volumes.set(typeId, volumeDates.map(trade_date => ({ trade_date, volume: daily?.get(trade_date) ?? 0 })));
+      }
+    }
+    return { prices: priceMap, volumes };
+  };
+  const loadOrderLevels = async (typeIds: number[]) => {
+    const result = new Map<number, { buy: OrderLevelRow[]; sell: OrderLevelRow[] }>();
+    const unique = [...new Set(typeIds)];
+    for (let index = 0; index < unique.length; index += 400) {
+      const batch = unique.slice(index, index + 400);
+      const placeholders = batch.map(() => "?").join(",");
+      const rows = (await db.prepare(`SELECT type_id, side, price, volume FROM market_order_levels WHERE region_id=? AND type_id IN (${placeholders}) ORDER BY type_id, side, level`).bind(MARKET_REGION_ID, ...batch).all<OrderLevelRow>()).results;
+      for (const row of rows) {
+        const book = result.get(row.type_id) ?? { buy: [], sell: [] };
+        book[row.side].push(row);
+        result.set(row.type_id, book);
+      }
+    }
+    return result;
+  };
+  const hydrate = async (offers: OfferRow[], materials: Map<string, MaterialRow[]>) => {
+    const allMaterials = [...materials.values()].flat();
+    const outputTypeIds = offers.map(offer => offer.product_type_id || offer.type_id);
+    const allTypeIds = [...outputTypeIds, ...allMaterials.map(material => material.type_id)];
+    const [historyData, orderLevels] = await Promise.all([loadHistoryData(allTypeIds), loadOrderLevels(allTypeIds)]);
+    for (const material of allMaterials) {
+      material.historical_prices = historyData.prices.get(material.type_id) ?? emptyHistory();
+      const execution = executionPrice(orderLevels.get(material.type_id)?.sell ?? [], material.quantity);
+      material.sell_execution_price = execution.price || material.sell_price;
+      material.sell_execution_coverage = execution.price ? execution.coverage : material.sell_price > 0 ? 1 : 0;
+    }
+    return offers.map(offer => {
+      const typeId = offer.product_type_id || offer.type_id;
+      const execution = executionPrice(orderLevels.get(typeId)?.buy ?? [], offer.revenue_quantity || offer.quantity);
+      return {
+        ...offer,
+        historical_prices: historyData.prices.get(typeId) ?? { 30: offer.history_30, 15: offer.history_15, 7: offer.history_7, 3: offer.history_3, 1: offer.history_1 },
+        daily_volumes: historyData.volumes.get(typeId) ?? [],
+        buy_execution_price: execution.price || offer.buy_price,
+        buy_execution_coverage: execution.price ? execution.coverage : offer.buy_price > 0 ? 1 : 0,
+        materials: materials.get(`${offer.corporation_id}:${offer.offer_id}`) ?? [],
+      };
+    });
+  };
 
   if (corporationId && url.searchParams.get("view") === "detail") {
     const requestedSize = url.searchParams.get("page_size") || "10";
@@ -149,16 +271,23 @@ export async function GET(request: Request) {
       const netProfit = items.every(item => item.buy_price > 0) ? items.reduce((sum, item) => sum + item.buy_price * 0.97 - item.isk_cost - item.material_cost, 0) : null;
       return { name: chineseName || name, item_count: 6, total_lp: totalLp, lp_ratio: netProfit !== null && totalLp > 0 ? netProfit / totalLp : null, priced_count: items.filter(item => item.sell_price > 0).length, market_value: marketValue, items: items.map((item, index) => ({ level: levels[index], type_id: item.type_id, name: item.name_zh || item.name_en, lp_cost: item.lp_cost, sell_price: item.sell_price })) };
     });
-    return Response.json({ view: "detail", offers: hydrate(offers, materials), total, page, pageSize: requestedSize === "all" ? "all" : pageSize, pages: requestedSize === "all" ? 1 : Math.max(1, Math.ceil(total / pageSize)), days, implant_sets: implantSets });
+    return Response.json({ view: "detail", offers: await hydrate(offers, materials), total, page, pageSize: requestedSize === "all" ? "all" : pageSize, pages: requestedSize === "all" ? 1 : Math.max(1, Math.ceil(total / pageSize)), days, historyLatestDate: latestHistoryDate, implant_sets: implantSets });
   }
 
-  const snapshots = (await db.prepare("SELECT list_kind, rank, snapshot_date, calculated_at, payload FROM ranking_snapshots ORDER BY list_kind, rank").all<{ list_kind: string; rank: number; snapshot_date: string; calculated_at: string; payload: string }>()).results;
+  const snapshots = (await db.prepare("SELECT list_kind, rank, snapshot_date, calculated_at, payload FROM ranking_snapshots WHERE rank <= 100 ORDER BY list_kind, rank").all<{ list_kind: string; rank: number; snapshot_date: string; calculated_at: string; payload: string }>()).results;
   const isBoosterBlueprint = (offer: OfferRow) => Boolean(offer.is_blueprint) && /增效体|增效剂|booster/i.test(`${offer.item_name || ""} ${offer.product_name || ""}`);
-  const parse = (kind: string) => snapshots.filter(row => row.list_kind === kind).map(row => JSON.parse(row.payload) as OfferRow).filter(offer => includeBoosterBlueprints || !isBoosterBlueprint(offer)).slice(0, 100);
+  const parse = (kind: string) => snapshots.filter(row => row.list_kind === kind).map(row => JSON.parse(row.payload) as OfferRow & { materials?: MaterialRow[] }).filter(offer => includeBoosterBlueprints || !isBoosterBlueprint(offer)).slice(0, 100);
+  const hydrateSnapshot = async (offers: (OfferRow & { materials?: MaterialRow[] })[]) => {
+    const materialMap = new Map<string, MaterialRow[]>();
+    for (const offer of offers) materialMap.set(`${offer.corporation_id}:${offer.offer_id}`, offer.materials ?? []);
+    return hydrate(offers, materialMap);
+  };
+  const [popular, highRatio] = await Promise.all([hydrateSnapshot(parse("popular")), hydrateSnapshot(parse("highRatio"))]);
   return Response.json({
-    popular: parse("popular"),
-    highRatio: parse("highRatio"),
+    popular,
+    highRatio,
     days,
+    historyLatestDate: latestHistoryDate,
     snapshotDate: snapshots[0]?.snapshot_date ?? null,
     calculatedAt: snapshots[0]?.calculated_at ?? null,
   });

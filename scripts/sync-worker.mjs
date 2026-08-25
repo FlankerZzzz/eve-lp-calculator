@@ -8,6 +8,7 @@ const transientFailures = new Map();
 let roundRobinIndex = 0;
 let lastRankingDueCheck = 0;
 let lastScheduleKey = "";
+let lastScheduleAttemptAt = 0;
 
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 
@@ -53,34 +54,51 @@ async function readStatus() {
   return response.json();
 }
 
-async function scheduleDueJobs() {
-  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
-  }).formatToParts(new Date()).filter(part => part.type === "hour" || part.type === "minute").map(part => [part.type, Number(part.value)]));
+function shanghaiParts(date = new Date()) {
+  return Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(date).filter(part => ["year", "month", "day", "hour", "minute"].includes(part.type)).map(part => [part.type, Number(part.value)]));
+}
+
+function shanghaiDateKey(value = new Date()) {
+  const parts = shanghaiParts(value);
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+}
+
+async function scheduleDueJobs(data) {
+  const now = new Date();
+  const parts = shanghaiParts(now);
   const hour = parts.hour;
   const minute = parts.minute;
-  const key = `${new Date().toISOString().slice(0, 10)}-${hour}:${minute}`;
-  if (key === lastScheduleKey) return false;
+  const today = shanghaiDateKey(now);
   const orderHours = new Set([0, 3, 9, 12, 15, 18, 21]);
   const isOrderDue = minute === 0 && orderHours.has(hour);
-  const isHistoryDue = hour === 0 && minute === 30;
+  const historyJob = data.jobs?.find(job => job.kind === "history");
+  const historyUpdatedDate = historyJob?.updated_at ? shanghaiDateKey(new Date(historyJob.updated_at)) : "";
+  const afterHistoryTime = hour > 0 || (hour === 0 && minute >= 30);
+  const isHistoryDue = historyJob?.status !== "running" && afterHistoryTime && historyUpdatedDate !== today;
   if (!isOrderDue && !isHistoryDue) return false;
   const kind = isHistoryDue ? "history" : "orders";
+  const key = isHistoryDue ? `history:${today}` : `orders:${today}:${hour}`;
+  if (key === lastScheduleKey || Date.now() - lastScheduleAttemptAt < 60000) return false;
+  lastScheduleAttemptAt = Date.now();
   const response = await fetch(`${baseUrl}/api/sync/control`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ kind, action: "restart" }),
   });
-  if (response.ok || response.status === 409) {
+  if (response.ok) {
     lastScheduleKey = key;
-    console.log(`[sync-worker] 定时启动 ${kind}：Asia/Shanghai ${hour}:${String(minute).padStart(2, "0")}`);
+    console.log(`[sync-worker] 定时启动 ${kind}：Asia/Shanghai ${today} ${hour}:${String(minute).padStart(2, "0")}`);
     return true;
   }
+  if (response.status === 409) console.log(`[sync-worker] ${kind} 与其他任务冲突，60 秒后重新调度`);
   return false;
 }
 
 async function nextRunningJob() {
-  await scheduleDueJobs();
   const data = await readStatus();
+  await scheduleDueJobs(data);
   const running = data.jobs?.filter(job => job.status === "running") || [];
   if (running.some(job => job.kind === "orders")) return null;
   if (!running.length && Date.now() - lastRankingDueCheck > 60000) {
@@ -98,10 +116,13 @@ async function nextRunningJob() {
 }
 
 function calculatedOffer(offer) {
-  const materialCost = (offer.materials || []).reduce((sum, material) => sum + material.quantity * (material.sell_price || 0), 0);
+  const materialCost = (offer.materials || []).reduce((sum, material) => sum + material.quantity * (material.sell_execution_price || material.sell_price || 0), 0);
+  const materialsCovered = (offer.materials || []).every(material => material.quantity <= 0 || (material.sell_execution_coverage ?? (material.sell_price > 0 ? 1 : 0)) >= 1);
+  const outputCovered = (offer.buy_execution_coverage ?? (offer.buy_price > 0 ? 1 : 0)) >= 1;
   const revenueQuantity = offer.revenue_quantity || offer.quantity;
-  const maxProfit = offer.sell_price > 0 ? offer.sell_price * revenueQuantity * 0.97 - offer.isk_cost - materialCost : null;
-  const minProfit = offer.buy_price > 0 ? offer.buy_price * revenueQuantity * 0.97 - offer.isk_cost - materialCost : null;
+  const maxProfit = offer.sell_price > 0 && materialsCovered ? offer.sell_price * revenueQuantity * 0.97 - offer.isk_cost - materialCost : null;
+  const immediateBuyPrice = offer.buy_execution_price || offer.buy_price;
+  const minProfit = immediateBuyPrice > 0 && outputCovered && materialsCovered ? immediateBuyPrice * revenueQuantity * 0.97 - offer.isk_cost - materialCost : null;
   return { ...offer, material_total: materialCost, max_profit: maxProfit, min_profit: minProfit, lp_ratio: offer.lp_cost > 0 && minProfit !== null ? minProfit / offer.lp_cost : 0 };
 }
 

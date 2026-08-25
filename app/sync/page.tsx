@@ -81,7 +81,7 @@ export default function SyncPage() {
 
   return <main className="sync-page">
     <nav className="topbar">
-      <div className="brand"><span className="mark">✦</span><span>LP<span className="accent">/</span>同步控制台</span><small>晨曦 · SQLite</small></div>
+      <div className="brand"><span className="mark">✦</span><span>LP<span className="accent">/</span>同步控制台</span><small>数据源：晨曦</small></div>
       <span className="database-state">{message}</span>
       <Link className="nav-action" href="/">返回收益分析 →</Link>
     </nav>

@@ -8,9 +8,21 @@ export function getD1(): D1Database {
 }
 
 let schemaReady = false;
+let schemaInitialization: Promise<D1Database> | null = null;
 
 export async function ensureSchema() {
   if (schemaReady) return getD1();
+  if (schemaInitialization) return schemaInitialization;
+  schemaInitialization = initializeSchema();
+  try {
+    return await schemaInitialization;
+  } catch (error) {
+    schemaInitialization = null;
+    throw error;
+  }
+}
+
+async function initializeSchema() {
   const db = getD1();
   const statements = [
     `CREATE TABLE IF NOT EXISTS factions (faction_id INTEGER PRIMARY KEY, name TEXT NOT NULL, updated_at TEXT NOT NULL)`,

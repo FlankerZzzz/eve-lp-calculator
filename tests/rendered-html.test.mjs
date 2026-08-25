@@ -5,10 +5,11 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 const source = path => readFile(new URL(path, root), "utf8");
 
-test("最大利润用最低卖单、最小利润用最高收单", async () => {
+test("最大利润保留最低卖单参考，最小利润按产出数量逐档吃收单", async () => {
   const [page, route, esi] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts"), source("lib/esi-server.ts")]);
   assert.match(page, /offer\.sell_price \* revenueQuantity/);
-  assert.match(page, /offer\.buy_price \* revenueQuantity/);
+  assert.match(page, /immediateBuyPrice \* revenueQuantity/);
+  assert.match(route, /executionPrice\(orderLevels\.get\(typeId\)\?\.buy/);
   assert.match(route, /sell_price \* revenue_quantity \* \? - isk_cost - material_total END max_profit/);
   assert.match(route, /buy_price \* revenue_quantity \* \? - isk_cost - material_total END min_profit/);
   assert.match(esi, /buyPrice: Math\.max/);
@@ -86,10 +87,10 @@ test("组合计算的全量材料查询按小批次执行", async () => {
   assert.match(route, /pageSize = requestedSize === "all"/);
 });
 
-test("组合计算只显示扣除成本后的保守利润和 LP 比例", async () => {
+test("组合计算按材料和产出数量逐档成交，并显示保守利润和 LP 比例", async () => {
   const page = await source("app/page.tsx");
-  assert.match(page, /unitPrice = material\.sell_price/);
-  assert.match(page, /minProfit = offer\.buy_price > 0/);
+  assert.match(page, /material\.sell_execution_price \|\| material\.sell_price/);
+  assert.match(page, /immediateBuyPrice > 0/);
   assert.match(page, /lpRatio = usedLp > 0 \? totalProfit \/ usedLp : 0/);
   assert.match(page, /总体 LP 比例/);
   assert.match(page, /税后净利润 ÷ 已使用 LP/);
@@ -126,9 +127,56 @@ test("市场订单使用独立按钮", async () => {
   assert.match(page, /<button className="market-order-link"/);
   assert.match(page, /当前收单 · 价格从高到低/);
   assert.match(page, /当前卖单 · 价格从低到高/);
-  assert.match(esi, /\.slice\(0, 5\)/);
+  assert.doesNotMatch(esi, /\.slice\(0, 5\)/);
   assert.match(esi, /grouped\.set\(order\.price/);
   assert.match(route, /FROM market_order_levels/);
+  assert.match(page, /\[10, 20, 50\]/);
+});
+
+test("历史收益支持 30、15、7、3 日和当日均价对比", async () => {
+  const [page, route] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts")]);
+  assert.match(page, /type HistoryWindow = 30 \| 15 \| 7 \| 3 \| 1/);
+  assert.match(page, /历史价对比/);
+  assert.match(page, /historyDeviation/);
+  assert.match(route, /history_30/);
+  assert.match(route, /history_15/);
+  assert.match(route, /history_7/);
+  assert.match(route, /history_3/);
+  assert.match(route, /history_1/);
+  assert.match(page, /最近交易日/);
+  assert.match(route, /MAX\(trade_date\)/);
+  assert.match(route, /previousLatest \|\| row\.trade_date > previousLatest\.trade_date/);
+  assert.match(route, /latest\.get\(typeId\)\?\.average_price/);
+});
+
+test("历史同步错过 00:30 后会补跑且冲突不会被误判成功", async () => {
+  const worker = await source("scripts/sync-worker.mjs");
+  assert.match(worker, /historyUpdatedDate !== today/);
+  assert.match(worker, /response\.status === 409/);
+  assert.doesNotMatch(worker, /response\.ok \|\| response\.status === 409/);
+  assert.match(worker, /60 秒后重新调度/);
+});
+
+test("桌面榜单使用高密度组合列和30天自然日均量", async () => {
+  const [page, route, css] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts"), source("app/globals.css")]);
+  assert.match(page, /30天日均交易量/);
+  assert.match(page, /指示价格利润/);
+  assert.match(page, /低于.*（指示价格）/);
+  assert.match(route, /SUM\(volume\) \/ \?/);
+  assert.match(route, /MARKET_REGION_ID, days, cutoff, MARKET_REGION_ID, MARKET_REGION_ID/);
+  assert.match(route, /anchorDate\}T00:00:00Z/);
+  assert.doesNotMatch(route, /anchorDate\}T00:00:00\+08:00/);
+  assert.match(page, /formatNumber\(offer\.revenue_quantity \|\| offer\.quantity\)/);
+  assert.doesNotMatch(page, /· 产出 \$\{offer\.product_name/);
+  assert.match(css, /volume-value::before.*yield::before/);
+  assert.match(page, /function SalesSparkline/);
+  assert.match(page, /dateIndexes = \[0, 7, 14, 21, 29\]/);
+  assert.match(page, /Math\.sqrt\(value \/ maximum\)/);
+  assert.match(page, /function SalesTrend/);
+  assert.match(page, /values\.slice\(0, 3\).*values\.slice\(3\)/s);
+  assert.match(page, /3日走势/);
+  assert.match(route, /historyDates\(latestHistoryDate, 30\)/);
+  assert.match(route, /daily_volumes: historyData\.volumes\.get\(typeId\)/);
 });
 
 test("企业页识别完整六件脑插套装并为单件保留订单按钮", async () => {

@@ -36,7 +36,13 @@ yarn-error.log*
 
 # typescript
 next-env.d.ts
+*.tsbuildinfo
 /dist/
 /.wrangler/
 /outputs/
 /work/
+
+# local persistent runtime data
+/.data/
+/docker-data/
+/.pnpm-store/

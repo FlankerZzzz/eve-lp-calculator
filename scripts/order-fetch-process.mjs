@@ -40,7 +40,7 @@ export function summarize(orders) {
   const levels = (source, direction) => {
     const grouped = new Map();
     for (const order of source) grouped.set(order.price, (grouped.get(order.price) || 0) + order.volume_remain);
-    return [...grouped.entries()].sort(([a], [b]) => direction === "asc" ? a - b : b - a).slice(0, 5).map(([price, volume], index) => ({ level: index + 1, price, volume }));
+    return [...grouped.entries()].sort(([a], [b]) => direction === "asc" ? a - b : b - a).map(([price, volume], index) => ({ level: index + 1, price, volume }));
   };
   return {
     buyPrice: filteredBuys.length ? Math.max(...filteredBuys.map(order => order.price)) : 0,
