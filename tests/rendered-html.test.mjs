@@ -24,6 +24,26 @@ test("首页只读取每日固定榜单快照", async () => {
   assert.doesNotMatch(route, /ORDER BY daily_volume DESC, lp_ratio DESC LIMIT 5/);
 });
 
+test("订单使用伏尔戈全量双槽快照并按半小时调度", async () => {
+  const [daemon, worker, schema] = await Promise.all([source("scripts/order-sync-daemon.mjs"), source("scripts/sync-worker.mjs"), source("db/d1.ts")]);
+  assert.match(daemon, /order_type=all&page=\$\{page\}/);
+  assert.doesNotMatch(daemon, /orders\/\?[^`\n]*type_id=/);
+  assert.match(daemon, /JITA_44_LOCATION_ID = 60003760/);
+  assert.match(daemon, /PAGE_CONCURRENCY = 8/);
+  assert.match(daemon, /market_order_book_state/);
+  assert.match(daemon, /保留上一份完整快照并自动重试/);
+  assert.match(worker, /function halfHourSlotKey/);
+  assert.match(worker, /orderRunSlot !== currentOrderSlot/);
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS market_order_book/);
+});
+
+test("榜单按上海时间每日四次更新", async () => {
+  const rankings = await source("app/api/sync/rankings/route.ts");
+  assert.match(rankings, /RANKING_HOURS = \[9, 15, 18, 21\]/);
+  assert.match(rankings, /dueRankingSlot/);
+  assert.match(rankings, /本时段榜单已更新/);
+});
+
 test("同步控制台不再提供关联同步", async () => {
   const [page, control, status] = await Promise.all([source("app/sync/page.tsx"), source("app/api/sync/control/route.ts"), source("app/api/sync/status/route.ts")]);
   assert.doesNotMatch(page, /linked|关联同步|SQLite\/D1/);
@@ -170,9 +190,13 @@ test("桌面榜单使用高密度组合列和30天自然日均量", async () => 
   assert.doesNotMatch(page, /· 产出 \$\{offer\.product_name/);
   assert.match(css, /volume-value::before.*yield::before/);
   assert.match(page, /function SalesSparkline/);
+  assert.match(page, /function publishedVolumePoints/);
+  assert.match(page, /findLastIndex\(point => point\.volume > 0\)/);
+  assert.match(page, /publishedVolumePoints\(points\)\.slice\(-30\)/);
   assert.match(page, /dateIndexes = \[0, 7, 14, 21, 29\]/);
   assert.match(page, /Math\.sqrt\(value \/ maximum\)/);
   assert.match(page, /function SalesTrend/);
+  assert.match(page, /publishedVolumePoints\(points\)\.slice\(-6\)/);
   assert.match(page, /values\.slice\(0, 3\).*values\.slice\(3\)/s);
   assert.match(page, /3日走势/);
   assert.match(route, /historyDates\(latestHistoryDate, 30\)/);

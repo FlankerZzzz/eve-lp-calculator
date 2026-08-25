@@ -90,6 +90,30 @@ export const marketOrderLevels = sqliteTable("market_order_levels", {
   collectedAt: text("collected_at").notNull(),
 }, table => [primaryKey({ columns: [table.regionId, table.typeId, table.side, table.level] })]);
 
+export const marketOrderBook = sqliteTable("market_order_book", {
+  slot: integer("slot").notNull(),
+  orderId: integer("order_id").notNull(),
+  typeId: integer("type_id").notNull(),
+  locationId: integer("location_id").notNull(),
+  systemId: integer("system_id").notNull(),
+  isBuyOrder: integer("is_buy_order", { mode: "boolean" }).notNull(),
+  price: real("price").notNull(),
+  volumeRemain: integer("volume_remain").notNull(),
+  volumeTotal: integer("volume_total").notNull(),
+  minVolume: integer("min_volume").notNull(),
+  orderRange: text("order_range").notNull(),
+  issued: text("issued").notNull(),
+  duration: integer("duration").notNull(),
+}, table => [primaryKey({ columns: [table.slot, table.orderId] })]);
+
+export const marketOrderBookState = sqliteTable("market_order_book_state", {
+  id: integer("id").primaryKey(),
+  activeSlot: integer("active_slot").notNull().default(0),
+  snapshotId: text("snapshot_id"),
+  collectedAt: text("collected_at"),
+  orderCount: integer("order_count").notNull().default(0),
+});
+
 export const syncRuns = sqliteTable("sync_runs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   kind: text("kind").notNull(),

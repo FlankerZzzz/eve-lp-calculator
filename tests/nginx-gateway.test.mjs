@@ -4,6 +4,7 @@ import test from "node:test";
 
 const compose = await readFile(new URL("../docker-compose.yml", import.meta.url), "utf8");
 const nginx = await readFile(new URL("../nginx/nginx.conf", import.meta.url), "utf8");
+const proxyCommon = await readFile(new URL("../nginx/proxy-common.conf", import.meta.url), "utf8");
 const denied = await readFile(new URL("../nginx/html/__security/denied.html", import.meta.url), "utf8");
 
 test("只有 Nginx 向宿主机公开 42981，Web 仅暴露内部 3000", () => {
@@ -23,4 +24,12 @@ test("403 使用自定义深空拒绝页", () => {
   assert.match(nginx, /error_page 403 \/__security\/denied\.html;/);
   assert.match(denied, /跃迁航道未获授权/);
   assert.match(denied, /deep-space-checkpoint\.png/);
+});
+
+test("Nginx 隐藏框架标识并发送浏览器安全响应头", () => {
+  assert.match(nginx, /X-Content-Type-Options "nosniff" always/);
+  assert.match(nginx, /X-Frame-Options "SAMEORIGIN" always/);
+  assert.match(nginx, /Referrer-Policy "strict-origin-when-cross-origin" always/);
+  assert.match(nginx, /Permissions-Policy "camera=\(\), microphone=\(\), geolocation=\(\)" always/);
+  assert.match(proxyCommon, /proxy_hide_header X-Powered-By/);
 });

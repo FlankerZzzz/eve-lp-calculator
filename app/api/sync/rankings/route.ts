@@ -1,12 +1,27 @@
 import { ensureSchema } from "../../../../db/d1";
 import { updateSyncJob } from "../../../../db/sync-state";
 
-const chinaDate = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+const RANKING_HOURS = [9, 15, 18, 21];
+const chinaParts = (date = new Date()) => Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+}).formatToParts(date).filter(part => ["year", "month", "day", "hour", "minute"].includes(part.type)).map(part => [part.type, Number(part.value)]));
+const chinaDate = () => {
+  const parts = chinaParts();
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+};
+const dueRankingSlot = (date = new Date()) => {
+  const parts = chinaParts(date);
+  const hour = RANKING_HOURS.filter(candidate => candidate <= parts.hour).at(-1);
+  if (hour === undefined) return null;
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:00:00+08:00`;
+};
 
 export async function GET() {
   const db = await ensureSchema();
   const row = await db.prepare("SELECT snapshot_date, calculated_at FROM ranking_snapshots ORDER BY calculated_at DESC LIMIT 1").first<{ snapshot_date: string; calculated_at: string }>();
-  return Response.json({ snapshotDate: row?.snapshot_date ?? null, calculatedAt: row?.calculated_at ?? null, due: row?.snapshot_date !== chinaDate() });
+  const slot = dueRankingSlot();
+  const due = slot !== null && (!row?.calculated_at || new Date(row.calculated_at).getTime() < new Date(slot).getTime());
+  return Response.json({ snapshotDate: row?.snapshot_date ?? null, calculatedAt: row?.calculated_at ?? null, due, slot, schedule: RANKING_HOURS });
 }
 
 export async function POST(request: Request) {
@@ -26,6 +41,6 @@ export async function POST(request: Request) {
     rows.slice(0, 100).forEach((row, index) => statements.push(db.prepare("INSERT INTO ranking_snapshots (list_kind, rank, snapshot_date, calculated_at, payload) VALUES (?, ?, ?, ?, ?)").bind(kind, index + 1, date, now, JSON.stringify(row))));
   }
   await db.batch(statements);
-  await updateSyncJob({ kind: "rankings", status: "complete", phase: "今日榜单已固定", remaining: 0, endpoint: "/api/sync/rankings", httpStatus: 200, response: { snapshotDate: date, popular: body.popular.length, highRatio: body.highRatio.length } });
+  await updateSyncJob({ kind: "rankings", status: "complete", phase: "本时段榜单已更新", remaining: 0, endpoint: "/api/sync/rankings", httpStatus: 200, response: { snapshotDate: date, slot: dueRankingSlot(), popular: body.popular.length, highRatio: body.highRatio.length } });
   return Response.json({ ok: true, snapshotDate: date, calculatedAt: now });
 }

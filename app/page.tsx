@@ -9,6 +9,11 @@ type HistoryWindow = 30 | 15 | 7 | 3 | 1;
 type HistoryPrices = Record<HistoryWindow, number>;
 type DailyVolumePoint = { trade_date: string; volume: number };
 
+function publishedVolumePoints(points: DailyVolumePoint[]) {
+  const lastPublishedIndex = points.findLastIndex(point => point.volume > 0);
+  return lastPublishedIndex >= 0 ? points.slice(0, lastPublishedIndex + 1) : [];
+}
+
 type FactionOption = { faction_id: number; name: string };
 type CorporationOption = { corporation_id: number; faction_id: number | null; name: string; offer_count: number };
 type Counts = { corporations: number; items: number; offers: number; history_rows: number; order_types: number };
@@ -52,7 +57,7 @@ function SalesSparkline({ points = [] }: { points?: DailyVolumePoint[] }) {
   const width = 100;
   const baseline = 29;
   const plotHeight = 25;
-  const recent = points.slice(-30);
+  const recent = publishedVolumePoints(points).slice(-30);
   const series = [...Array(Math.max(0, 30 - recent.length)).fill(null), ...recent];
   const values = series.map(point => Math.max(0, point?.volume ?? 0));
   const maximum = Math.max(0, ...values);
@@ -72,7 +77,7 @@ function SalesSparkline({ points = [] }: { points?: DailyVolumePoint[] }) {
 }
 
 function SalesTrend({ points = [] }: { points?: DailyVolumePoint[] }) {
-  const values = points.slice(-6).map(point => Math.max(0, point.volume));
+  const values = publishedVolumePoints(points).slice(-6).map(point => Math.max(0, point.volume));
   if (values.length < 6) return <span className="sales-trend neutral">3日走势 暂无</span>;
   const previous = values.slice(0, 3).reduce((sum, value) => sum + value, 0) / 3;
   const current = values.slice(3).reduce((sum, value) => sum + value, 0) / 3;

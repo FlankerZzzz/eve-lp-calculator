@@ -36,6 +36,9 @@ async function initializeSchema() {
     `CREATE TABLE IF NOT EXISTS market_daily (region_id INTEGER NOT NULL, type_id INTEGER NOT NULL, trade_date TEXT NOT NULL, average_price REAL NOT NULL, highest_price REAL NOT NULL, lowest_price REAL NOT NULL, volume INTEGER NOT NULL, PRIMARY KEY (region_id, type_id, trade_date))`,
     `CREATE TABLE IF NOT EXISTS market_orders (region_id INTEGER NOT NULL, type_id INTEGER NOT NULL, buy_price REAL NOT NULL, sell_price REAL NOT NULL, buy_volume INTEGER NOT NULL, sell_volume INTEGER NOT NULL, collected_at TEXT NOT NULL, PRIMARY KEY (region_id, type_id))`,
     `CREATE TABLE IF NOT EXISTS market_order_levels (region_id INTEGER NOT NULL, type_id INTEGER NOT NULL, side TEXT NOT NULL, level INTEGER NOT NULL, price REAL NOT NULL, volume INTEGER NOT NULL, collected_at TEXT NOT NULL, PRIMARY KEY (region_id, type_id, side, level))`,
+    `CREATE TABLE IF NOT EXISTS market_order_book (slot INTEGER NOT NULL, order_id INTEGER NOT NULL, type_id INTEGER NOT NULL, location_id INTEGER NOT NULL, system_id INTEGER NOT NULL, is_buy_order INTEGER NOT NULL, price REAL NOT NULL, volume_remain INTEGER NOT NULL, volume_total INTEGER NOT NULL, min_volume INTEGER NOT NULL, order_range TEXT NOT NULL, issued TEXT NOT NULL, duration INTEGER NOT NULL, PRIMARY KEY (slot, order_id))`,
+    `CREATE TABLE IF NOT EXISTS market_order_book_state (id INTEGER PRIMARY KEY CHECK (id=1), active_slot INTEGER NOT NULL DEFAULT 0, snapshot_id TEXT, collected_at TEXT, order_count INTEGER NOT NULL DEFAULT 0)`,
+    `INSERT OR IGNORE INTO market_order_book_state (id, active_slot, order_count) VALUES (1, 0, 0)`,
     `CREATE TABLE IF NOT EXISTS sync_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, status TEXT NOT NULL, detail TEXT, started_at TEXT NOT NULL, finished_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS sync_jobs (kind TEXT PRIMARY KEY, status TEXT NOT NULL, phase TEXT, run_started_at TEXT, processed INTEGER NOT NULL DEFAULT 0, remaining INTEGER NOT NULL DEFAULT 0, last_endpoint TEXT, last_http_status INTEGER, last_response TEXT, error TEXT, updated_at TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS sync_events (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, phase TEXT, endpoint TEXT, http_status INTEGER, response TEXT, created_at TEXT NOT NULL)`,
@@ -46,6 +49,8 @@ async function initializeSchema() {
     `CREATE INDEX IF NOT EXISTS idx_blueprint_product ON blueprint_recipes (product_type_id)`,
     `CREATE INDEX IF NOT EXISTS idx_market_daily_type_date ON market_daily (region_id, type_id, trade_date)`,
     `CREATE INDEX IF NOT EXISTS idx_market_order_levels_type ON market_order_levels (region_id, type_id, side, level)`,
+    `CREATE INDEX IF NOT EXISTS idx_market_order_book_type ON market_order_book (slot, type_id, is_buy_order, price)`,
+    `CREATE INDEX IF NOT EXISTS idx_market_order_book_location ON market_order_book (slot, location_id, type_id, is_buy_order, price)`,
     `CREATE INDEX IF NOT EXISTS idx_sync_events_created ON sync_events (created_at)`,
   ];
   await db.batch(statements.map(sql => db.prepare(sql)));

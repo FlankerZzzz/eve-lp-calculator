@@ -6,6 +6,7 @@ dist
 docker-data
 outputs
 work
+backups
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal

@@ -66,21 +66,29 @@ function shanghaiDateKey(value = new Date()) {
   return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
 }
 
+function halfHourSlotKey(value = new Date()) {
+  const parts = shanghaiParts(value);
+  const slot = parts.hour * 2 + (parts.minute >= 30 ? 1 : 0);
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}:${slot}`;
+}
+
 async function scheduleDueJobs(data) {
   const now = new Date();
   const parts = shanghaiParts(now);
   const hour = parts.hour;
   const minute = parts.minute;
   const today = shanghaiDateKey(now);
-  const orderHours = new Set([0, 3, 9, 12, 15, 18, 21]);
-  const isOrderDue = minute === 0 && orderHours.has(hour);
+  const orderJob = data.jobs?.find(job => job.kind === "orders");
+  const currentOrderSlot = halfHourSlotKey(now);
+  const orderRunSlot = orderJob?.run_started_at ? halfHourSlotKey(new Date(orderJob.run_started_at)) : "";
+  const isOrderDue = orderJob?.status !== "running" && orderRunSlot !== currentOrderSlot;
   const historyJob = data.jobs?.find(job => job.kind === "history");
   const historyUpdatedDate = historyJob?.updated_at ? shanghaiDateKey(new Date(historyJob.updated_at)) : "";
   const afterHistoryTime = hour > 0 || (hour === 0 && minute >= 30);
   const isHistoryDue = historyJob?.status !== "running" && afterHistoryTime && historyUpdatedDate !== today;
   if (!isOrderDue && !isHistoryDue) return false;
   const kind = isHistoryDue ? "history" : "orders";
-  const key = isHistoryDue ? `history:${today}` : `orders:${today}:${hour}`;
+  const key = isHistoryDue ? `history:${today}` : `orders:${currentOrderSlot}`;
   if (key === lastScheduleKey || Date.now() - lastScheduleAttemptAt < 60000) return false;
   lastScheduleAttemptAt = Date.now();
   const response = await fetch(`${baseUrl}/api/sync/control`, {

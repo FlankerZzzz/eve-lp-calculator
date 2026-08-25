@@ -21,6 +21,10 @@
 # misc
 .DS_Store
 *.pem
+*.key
+*.ppk
+id_rsa*
+id_ed25519*
 
 # debug
 npm-debug.log*
@@ -41,6 +45,7 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+/backups/
 
 # local persistent runtime data
 /.data/
