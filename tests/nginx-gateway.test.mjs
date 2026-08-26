@@ -27,11 +27,13 @@ test("403 使用自定义深空拒绝页", () => {
   assert.match(denied, /跃迁航道未获授权/);
   assert.match(denied, /deep-space-checkpoint-v2\.png/);
   assert.match(denied, /class="space-fx"/);
-  assert.match(denied, /clip-path: polygon\(0 8%/);
-  assert.match(denied, /\.engine-flare::after/);
-  assert.match(denied, /width: max\(100vw, 177\.683vh\)/);
-  assert.equal((denied.match(/<i class="engine-flare"><\/i>/g) ?? []).length, 3);
-  assert.match(denied, /scaleX\(1\.1\) scaleY\(1\.04\)/);
+  assert.match(denied, /class="engine-effects"/);
+  assert.equal((denied.match(/<g class="engine-jet">/g) ?? []).length, 3);
+  assert.match(denied, /@keyframes plume-breathe/);
+  assert.match(denied, /@keyframes original-plume-flicker/);
+  assert.equal((denied.match(/class="engine-pixels"/g) ?? []).length, 3);
+  assert.doesNotMatch(denied, /engine-flow/);
+  assert.doesNotMatch(denied, /engine-flare/);
   assert.match(denied, /prefers-reduced-motion: reduce/);
   assert.doesNotMatch(denied, /\.space-fx \{ display: none; \}/);
 });

@@ -65,7 +65,7 @@
     }
     .particles::after {
       filter: blur(.5px);
-      opacity: .2;
+      opacity: .26;
       transform: scale(1.35);
     }
     .stream {
@@ -82,56 +82,37 @@
     .stream:nth-child(1) { top: 39%; transform: rotate(5deg); }
     .stream:nth-child(2) { top: 48%; transform: rotate(-2deg); animation-delay: -1.8s; }
     .stream:nth-child(3) { top: 57%; transform: rotate(-8deg); animation-delay: -3.4s; }
-    .space-fx > .engines {
-      inset: auto;
-      left: 50%;
-      top: 50%;
-      width: max(100vw, 177.683vh);
-      height: max(100vh, 56.280vw);
-      overflow: visible;
-      transform: translate(-50%, -50%);
-    }
-    .engine-flare {
-      position: absolute;
-      width: 10.5%;
-      height: 4%;
-      background:
-        radial-gradient(ellipse at 100% 50%, rgba(255, 255, 255, .96) 0 3%, rgba(154, 243, 255, .88) 9%, rgba(44, 174, 255, .48) 28%, transparent 64%),
-        radial-gradient(ellipse at 58% 38%, rgba(113, 228, 255, .44), transparent 31%),
-        radial-gradient(ellipse at 31% 65%, rgba(25, 116, 255, .3), transparent 38%),
-        linear-gradient(90deg, transparent 0, rgba(30, 129, 255, .07) 18%, rgba(45, 177, 255, .28) 58%, rgba(139, 238, 255, .72) 91%, rgba(238, 254, 255, .92) 100%);
-      clip-path: polygon(0 8%, 28% 16%, 64% 30%, 90% 40%, 100% 45%, 100% 55%, 90% 60%, 64% 70%, 28% 84%, 0 92%);
-      filter: blur(.35px) drop-shadow(0 0 6px rgba(95, 219, 255, .82)) drop-shadow(0 0 18px rgba(42, 144, 255, .42));
-      opacity: .68;
-      transform: rotate(var(--tilt, 0deg));
-      transform-origin: 100% 50%;
+    .engine-effects {
+      position: fixed;
+      z-index: 0;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      pointer-events: none;
       mix-blend-mode: screen;
     }
-    .engine-flare::before,
-    .engine-flare::after {
-      content: "";
-      position: absolute;
-      pointer-events: none;
+    .engine-jet { --engine-delay: 0s; }
+    .engine-jet:nth-of-type(2) { --engine-delay: -.57s; }
+    .engine-jet:nth-of-type(3) { --engine-delay: -1.08s; }
+    .engine-pixels {
+      opacity: .14;
+      filter: brightness(1.45) saturate(1.25) drop-shadow(0 0 5px rgba(80, 205, 255, .34));
     }
-    .engine-flare::before {
-      inset: 44% 0;
-      border-radius: 999px;
-      background: linear-gradient(90deg, transparent, rgba(100, 218, 255, .26) 38%, #dffcff 92%, #fff);
-      box-shadow: 0 0 8px rgba(111, 229, 255, .9);
+    .engine-plume {
+      fill: url(#engine-plasma);
+      filter: url(#engine-soft);
+      opacity: .2;
+      transform-box: fill-box;
+      transform-origin: right center;
     }
-    .engine-flare::after {
-      right: -3px;
-      top: 50%;
-      width: clamp(8px, .65vw, 15px);
-      aspect-ratio: 1;
-      border-radius: 50%;
-      background: #eaffff;
-      box-shadow: 0 0 7px 2px #83eaff, 0 0 22px 7px rgba(52, 155, 255, .58);
-      transform: translateY(-50%);
+    .engine-nozzle {
+      fill: #9cefff;
+      filter: url(#engine-nozzle-glow);
+      opacity: .16;
+      transform-box: fill-box;
+      transform-origin: center;
     }
-    .engine-flare:nth-child(1) { right: 65.9%; top: 46.85%; --tilt: -.35deg; }
-    .engine-flare:nth-child(2) { right: 63.5%; top: 54.3%; --tilt: .45deg; animation-delay: -.58s; }
-    .engine-flare:nth-child(3) { right: 54.5%; top: 60.7%; --tilt: 1.1deg; animation-delay: -1.12s; }
     .meteor {
       position: absolute;
       top: 12%;
@@ -256,7 +237,7 @@
       main { min-height: 100svh; padding: 30px 24px; }
       .telemetry { grid-template-columns: 1fr; }
       .code { font-size: 92px; }
-      .engine-flare { display: none; }
+      .engine-effects { display: none; }
       .stream { left: 54%; width: 58vw; }
     }
     @media (prefers-reduced-motion: no-preference) {
@@ -265,7 +246,9 @@
       .particles::before { animation: particle-drift 42s linear infinite; }
       .particles::after { animation: particle-drift-far 68s linear infinite reverse; }
       .stream { animation: stream-flow 4.8s ease-in-out infinite; }
-      .engine-flare { animation: engine-pulse 1.75s ease-in-out infinite; }
+      .engine-pixels { animation: original-plume-flicker 1.65s ease-in-out var(--engine-delay) infinite; }
+      .engine-plume { animation: plume-breathe 1.85s ease-in-out var(--engine-delay) infinite; }
+      .engine-nozzle { animation: nozzle-pulse 1.1s ease-in-out var(--engine-delay) infinite; }
       .meteor { animation: meteor-pass 8.5s linear infinite; }
       @keyframes pulse { 50% { opacity: .35; box-shadow: 0 0 4px #59dfff; } }
       @keyframes gate-breathe {
@@ -282,11 +265,21 @@
         34%, 68% { opacity: .74; clip-path: inset(0 0 0 0); }
         100% { opacity: 0; clip-path: inset(0 0 0 88%); }
       }
-      @keyframes engine-pulse {
-        0%, 100% { opacity: .5; transform: rotate(var(--tilt, 0deg)) scaleX(.76) scaleY(.72); filter: brightness(.88) blur(.5px) drop-shadow(0 0 6px rgba(95, 219, 255, .68)); background-position: 0 50%, 8% 42%, 4% 60%, 0 50%; }
-        24% { opacity: .84; transform: rotate(var(--tilt, 0deg)) scaleX(1.02) scaleY(1.12); filter: brightness(1.18) blur(.15px) drop-shadow(0 0 12px rgba(95, 219, 255, .92)); background-position: 0 50%, 18% 32%, 13% 72%, 0 50%; }
-        51% { opacity: .62; transform: rotate(var(--tilt, 0deg)) scaleX(.88) scaleY(.84); filter: brightness(.98) blur(.4px) drop-shadow(0 0 8px rgba(95, 219, 255, .76)); background-position: 0 50%, 4% 52%, 20% 48%, 0 50%; }
-        76% { opacity: .9; transform: rotate(var(--tilt, 0deg)) scaleX(1.1) scaleY(1.04); filter: brightness(1.24) blur(.2px) drop-shadow(0 0 14px rgba(95, 219, 255, .96)); background-position: 0 50%, 24% 36%, 9% 66%, 0 50%; }
+      @keyframes plume-breathe {
+        0%, 100% { opacity: .12; transform: scaleX(.96) scaleY(.86); }
+        38% { opacity: .34; transform: scaleX(1.035) scaleY(1.08); }
+        62% { opacity: .2; transform: scaleX(.985) scaleY(.94); }
+        82% { opacity: .4; transform: scaleX(1.055) scaleY(1.02); }
+      }
+      @keyframes original-plume-flicker {
+        0%, 100% { opacity: .08; filter: brightness(1.2) saturate(1.1) drop-shadow(0 0 3px rgba(80, 205, 255, .2)); }
+        34% { opacity: .34; filter: brightness(1.8) saturate(1.45) drop-shadow(0 0 9px rgba(80, 205, 255, .52)); }
+        61% { opacity: .16; filter: brightness(1.4) saturate(1.2) drop-shadow(0 0 5px rgba(80, 205, 255, .3)); }
+        83% { opacity: .4; filter: brightness(1.95) saturate(1.55) drop-shadow(0 0 11px rgba(80, 205, 255, .6)); }
+      }
+      @keyframes nozzle-pulse {
+        0%, 100% { opacity: .1; transform: scale(.88); }
+        48% { opacity: .42; transform: scale(1.08); }
       }
       @keyframes meteor-pass {
         0%, 70% { opacity: 0; transform: rotate(-28deg) translate3d(0, 0, 0); }
@@ -300,13 +293,51 @@
   </style>
 </head>
 <body>
+  <svg class="engine-effects" viewBox="0 0 1672 941" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <image id="engine-art-source" href="/__security/assets/deep-space-checkpoint-v2.png" width="1672" height="941"/>
+      <clipPath id="engine-tail-one">
+        <path d="M270 482 C378 466 499 451 579 452 L579 472 C497 483 377 510 270 518Z"/>
+      </clipPath>
+      <clipPath id="engine-tail-two">
+        <path d="M305 548 C419 526 540 511 619 516 L619 537 C536 547 417 580 305 585Z"/>
+      </clipPath>
+      <clipPath id="engine-tail-three">
+        <path d="M423 620 C548 594 682 575 771 578 L771 603 C680 613 548 650 423 660Z"/>
+      </clipPath>
+      <linearGradient id="engine-plasma" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#218cff" stop-opacity="0"/>
+        <stop offset=".44" stop-color="#2a9cff" stop-opacity=".2"/>
+        <stop offset=".82" stop-color="#56d8ff" stop-opacity=".58"/>
+        <stop offset="1" stop-color="#dbfbff" stop-opacity=".82"/>
+      </linearGradient>
+      <filter id="engine-soft" x="-20%" y="-80%" width="145%" height="260%">
+        <feGaussianBlur stdDeviation="7"/>
+      </filter>
+      <filter id="engine-nozzle-glow" x="-300%" y="-300%" width="700%" height="700%">
+        <feGaussianBlur stdDeviation="3"/>
+      </filter>
+    </defs>
+    <g class="engine-jet">
+      <use class="engine-pixels" href="#engine-art-source" clip-path="url(#engine-tail-one)"/>
+      <path class="engine-plume" d="M354 488 C423 471 507 456 570 456 C516 472 433 492 354 501 C343 498 344 492 354 488Z"/>
+      <ellipse class="engine-nozzle" cx="570" cy="461" rx="5" ry="3"/>
+    </g>
+    <g class="engine-jet">
+      <use class="engine-pixels" href="#engine-art-source" clip-path="url(#engine-tail-two)"/>
+      <path class="engine-plume" d="M388 552 C457 532 548 517 610 521 C553 537 468 560 388 568 C376 564 377 556 388 552Z"/>
+      <ellipse class="engine-nozzle" cx="610" cy="527" rx="5" ry="3"/>
+    </g>
+    <g class="engine-jet">
+      <use class="engine-pixels" href="#engine-art-source" clip-path="url(#engine-tail-three)"/>
+      <path class="engine-plume" d="M505 619 C584 598 695 579 761 583 C697 603 597 627 505 637 C492 633 493 624 505 619Z"/>
+      <ellipse class="engine-nozzle" cx="761" cy="590" rx="6" ry="4"/>
+    </g>
+  </svg>
   <div class="space-fx" aria-hidden="true">
     <div class="particles"></div>
     <div class="streams">
       <i class="stream"></i><i class="stream"></i><i class="stream"></i>
-    </div>
-    <div class="engines">
-      <i class="engine-flare"></i><i class="engine-flare"></i><i class="engine-flare"></i>
     </div>
     <div class="meteors">
       <i class="meteor"></i><i class="meteor"></i><i class="meteor"></i>
