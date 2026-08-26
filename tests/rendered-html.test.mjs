@@ -180,6 +180,14 @@ test("历史收益支持 30、15、7、3 日和当日均价对比", async () => 
   assert.match(route, /latest\.get\(typeId\)\?\.average_price/);
 });
 
+test("前端历史周期移除三日选项并为最近交易日标注实际日期", async () => {
+  const page = await source("app/page.tsx");
+  assert.match(page, /\[30, 15, 7, 1\] as HistoryWindow\[\]/);
+  assert.doesNotMatch(page, /\[30, 15, 7, 3, 1\] as HistoryWindow\[\]/);
+  assert.match(page, /最近交易日：\$\{chineseTradeDate\(latestPublishedTradeDate\)\}/);
+  assert.match(page, /title=\{recentDateHint\}/);
+});
+
 test("历史同步错过 00:30 后会补跑且冲突不会被误判成功", async () => {
   const worker = await source("scripts/sync-worker.mjs");
   assert.match(worker, /historyUpdatedDate !== today/);

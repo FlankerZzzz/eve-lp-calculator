@@ -19,7 +19,7 @@
       overflow: hidden;
       background:
         linear-gradient(90deg, rgba(2, 6, 11, .98) 0%, rgba(2, 8, 15, .88) 36%, rgba(3, 12, 20, .22) 72%),
-        url('/__security/assets/deep-space-checkpoint.png') center / cover no-repeat;
+        url('/__security/assets/deep-space-checkpoint-v2.png') center / cover no-repeat;
     }
     body::before {
       content: "";
@@ -30,6 +30,87 @@
         repeating-linear-gradient(0deg, rgba(118, 226, 255, .025) 0 1px, transparent 1px 5px),
         radial-gradient(circle at 78% 45%, transparent 0 18%, rgba(1, 4, 8, .35) 64%, rgba(1, 4, 8, .9) 100%);
     }
+    body::after {
+      content: "";
+      position: fixed;
+      z-index: 0;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse at 82% 44%, rgba(174, 241, 255, .22) 0, rgba(61, 186, 255, .08) 17%, transparent 38%),
+        linear-gradient(103deg, transparent 0 50%, rgba(120, 229, 255, .045) 52%, transparent 54%);
+      mix-blend-mode: screen;
+      opacity: .76;
+    }
+    .space-fx,
+    .space-fx > div {
+      position: fixed;
+      z-index: 0;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .particles::before,
+    .particles::after {
+      content: "";
+      position: absolute;
+      inset: -18%;
+      background-image:
+        radial-gradient(circle, rgba(205, 246, 255, .72) 0 1px, transparent 1.5px),
+        radial-gradient(circle, rgba(95, 201, 255, .45) 0 1px, transparent 1.5px),
+        radial-gradient(circle, rgba(255, 190, 112, .32) 0 1px, transparent 1.5px);
+      background-position: 11px 17px, 43px 71px, 89px 31px;
+      background-size: 113px 107px, 167px 151px, 227px 211px;
+      opacity: .36;
+    }
+    .particles::after {
+      filter: blur(.5px);
+      opacity: .2;
+      transform: scale(1.35);
+    }
+    .stream {
+      position: absolute;
+      left: 42%;
+      width: 48vw;
+      height: 1px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, transparent, rgba(67, 193, 255, .18) 24%, rgba(188, 245, 255, .86) 64%, transparent);
+      box-shadow: 0 0 8px rgba(78, 205, 255, .5), 0 0 22px rgba(54, 165, 255, .22);
+      opacity: 0;
+      transform-origin: 100% 50%;
+    }
+    .stream:nth-child(1) { top: 39%; transform: rotate(5deg); }
+    .stream:nth-child(2) { top: 48%; transform: rotate(-2deg); animation-delay: -1.8s; }
+    .stream:nth-child(3) { top: 57%; transform: rotate(-8deg); animation-delay: -3.4s; }
+    .engine-flare {
+      position: absolute;
+      left: 33%;
+      width: 16vw;
+      height: 3px;
+      border-radius: 100%;
+      background: linear-gradient(90deg, transparent, rgba(48, 145, 255, .1) 24%, rgba(77, 201, 255, .72) 72%, #e9fdff 100%);
+      filter: drop-shadow(0 0 7px rgba(76, 201, 255, .9));
+      opacity: .62;
+      transform: rotate(-1deg);
+      transform-origin: 100% 50%;
+    }
+    .engine-flare:nth-child(1) { top: 46%; }
+    .engine-flare:nth-child(2) { top: 51.5%; animation-delay: -.42s; }
+    .engine-flare:nth-child(3) { top: 57.2%; animation-delay: -.88s; }
+    .engine-flare:nth-child(4) { top: 62.6%; animation-delay: -1.24s; }
+    .meteor {
+      position: absolute;
+      top: 12%;
+      left: 58%;
+      width: 130px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(151, 226, 255, .9));
+      box-shadow: 0 0 8px rgba(84, 201, 255, .7);
+      opacity: 0;
+      transform: rotate(-28deg) translate3d(0, 0, 0);
+    }
+    .meteor:nth-child(2) { top: 22%; left: 72%; width: 82px; animation-delay: -3.6s; }
+    .meteor:nth-child(3) { top: 8%; left: 87%; width: 58px; animation-delay: -6.2s; }
     main {
       position: relative;
       z-index: 1;
@@ -141,14 +222,60 @@
       main { min-height: 100svh; padding: 30px 24px; }
       .telemetry { grid-template-columns: 1fr; }
       .code { font-size: 92px; }
+      .engine-flare { display: none; }
+      .stream { left: 54%; width: 58vw; }
     }
     @media (prefers-reduced-motion: no-preference) {
       .eyebrow::before { animation: pulse 2.8s ease-in-out infinite; }
+      body::after { animation: gate-breathe 5.8s ease-in-out infinite; }
+      .particles::before { animation: particle-drift 42s linear infinite; }
+      .particles::after { animation: particle-drift-far 68s linear infinite reverse; }
+      .stream { animation: stream-flow 4.8s ease-in-out infinite; }
+      .engine-flare { animation: engine-pulse 1.75s ease-in-out infinite; }
+      .meteor { animation: meteor-pass 8.5s linear infinite; }
       @keyframes pulse { 50% { opacity: .35; box-shadow: 0 0 4px #59dfff; } }
+      @keyframes gate-breathe {
+        50% { opacity: 1; filter: brightness(1.14) saturate(1.12); }
+      }
+      @keyframes particle-drift {
+        to { transform: translate3d(5%, 7%, 0); }
+      }
+      @keyframes particle-drift-far {
+        to { transform: scale(1.35) translate3d(-4%, 6%, 0); }
+      }
+      @keyframes stream-flow {
+        0%, 12% { opacity: 0; clip-path: inset(0 100% 0 0); }
+        34%, 68% { opacity: .74; clip-path: inset(0 0 0 0); }
+        100% { opacity: 0; clip-path: inset(0 0 0 88%); }
+      }
+      @keyframes engine-pulse {
+        0%, 100% { opacity: .45; transform: rotate(-1deg) scaleX(.82); }
+        45% { opacity: .9; transform: rotate(-1deg) scaleX(1.08); }
+      }
+      @keyframes meteor-pass {
+        0%, 70% { opacity: 0; transform: rotate(-28deg) translate3d(0, 0, 0); }
+        73% { opacity: .9; }
+        82%, 100% { opacity: 0; transform: rotate(-28deg) translate3d(-34vw, 0, 0); }
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .space-fx { display: none; }
     }
   </style>
 </head>
 <body>
+  <div class="space-fx" aria-hidden="true">
+    <div class="particles"></div>
+    <div class="streams">
+      <i class="stream"></i><i class="stream"></i><i class="stream"></i>
+    </div>
+    <div class="engines">
+      <i class="engine-flare"></i><i class="engine-flare"></i><i class="engine-flare"></i><i class="engine-flare"></i>
+    </div>
+    <div class="meteors">
+      <i class="meteor"></i><i class="meteor"></i><i class="meteor"></i>
+    </div>
+  </div>
   <main>
     <div class="eyebrow">Jump Gate Control · Sector 42981</div>
     <div class="code" aria-hidden="true">403</div>

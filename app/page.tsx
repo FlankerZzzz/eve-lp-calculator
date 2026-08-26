@@ -14,6 +14,11 @@ function publishedVolumePoints(points: DailyVolumePoint[]) {
   return lastPublishedIndex >= 0 ? points.slice(0, lastPublishedIndex + 1) : [];
 }
 
+function chineseTradeDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return year && month && day ? `${year}年${month}月${day}日` : value;
+}
+
 type FactionOption = { faction_id: number; name: string };
 type CorporationOption = { corporation_id: number; faction_id: number | null; name: string; offer_count: number };
 type Counts = { corporations: number; items: number; offers: number; history_rows: number; order_types: number };
@@ -362,6 +367,10 @@ export default function Home() {
   const detailCalculated = useMemo(() => calculate(detailOffers), [calculate, detailOffers]);
   const popularCalculated = useMemo(() => calculate(popularOffers), [calculate, popularOffers]);
   const ratioCalculated = useMemo(() => calculate(highRatioOffers), [calculate, highRatioOffers]);
+  const latestPublishedTradeDate = useMemo(() => [...detailOffers, ...popularOffers, ...highRatioOffers]
+    .flatMap(offer => publishedVolumePoints(offer.daily_volumes ?? []).map(point => point.trade_date))
+    .sort()
+    .at(-1) ?? "", [detailOffers, highRatioOffers, popularOffers]);
 
   const sortedDetails = useMemo(() => sortCalculatedOffers(detailCalculated, { key: sortKey, direction: sortDirection }), [detailCalculated, sortDirection, sortKey]);
   const sortedPopular = useMemo(() => sortCalculatedOffers(popularCalculated, popularSort), [popularCalculated, popularSort]);
@@ -436,7 +445,7 @@ export default function Home() {
   const detailTable = rankingTable("企业兑换详情", `共 ${detailTotal.toLocaleString()} 条 · 当前第 ${page} / ${detailPages} 页`, sortedDetails, { key: sortKey, direction: sortDirection }, toggleSort);
   const rankingPager = (label: string, currentPage: number, pageCount: number, setCurrentPage: Dispatch<SetStateAction<number>>) => <div className="ranking-pagination"><span>{label} · 第 {currentPage} / {pageCount} 页</span><select aria-label={`${label}每页数量`} value={rankingPageSize} onChange={event => { setRankingPageSize(event.target.value); setPopularPage(1); setRatioPage(1); }}><option value="10">每页 10 条</option><option value="20">每页 20 条</option><option value="50">每页 50 条</option><option value="100">每页 100 条</option></select><button type="button" disabled={currentPage <= 1} onClick={() => setCurrentPage(value => Math.max(1, value - 1))}>上一页</button><button type="button" disabled={currentPage >= pageCount} onClick={() => setCurrentPage(value => Math.min(pageCount, value + 1))}>下一页</button></div>;
   const boosterBlueprintToggle = <div className={`booster-blueprint-filter${showBoosterBlueprints ? " active" : ""}`}><span>{showBoosterBlueprints ? "当前包含增效剂蓝图" : "已过滤增效剂蓝图"}</span><button type="button" aria-pressed={showBoosterBlueprints} onClick={() => { setShowBoosterBlueprints(value => !value); setPage(1); setPopularPage(1); setRatioPage(1); }}>{showBoosterBlueprints ? "隐藏增效剂蓝图" : "显示增效剂蓝图"}</button></div>;
-  const historySelector = <div className="history-selector" aria-label="历史价格对比周期"><span>历史价对比</span>{([30, 15, 7, 3, 1] as HistoryWindow[]).map(value => <button type="button" className={historyWindow === value ? "active" : ""} aria-pressed={historyWindow === value} key={value} onClick={() => setHistoryWindow(value)}>{value === 1 ? "最近交易日" : `${value} 日`}</button>)}</div>;
+  const historySelector = <div className="history-selector" aria-label="历史价格对比周期"><span>历史价对比</span>{([30, 15, 7, 1] as HistoryWindow[]).map(value => { const recentDateHint = value === 1 ? (latestPublishedTradeDate ? `最近交易日：${chineseTradeDate(latestPublishedTradeDate)}` : "最近交易日：等待历史数据") : undefined; return <button type="button" className={historyWindow === value ? "active" : ""} aria-pressed={historyWindow === value} aria-label={recentDateHint} title={recentDateHint} key={value} onClick={() => setHistoryWindow(value)}>{value === 1 ? "最近交易日" : `${value} 日`}</button>})}</div>;
   const marketOrderColumn = (side: "buy" | "sell") => {
     const levels = side === "buy" ? marketSnapshot?.buy_levels ?? [] : marketSnapshot?.sell_levels ?? [];
     const currentPage = side === "buy" ? buyOrderPage : sellOrderPage;

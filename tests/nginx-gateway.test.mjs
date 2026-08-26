@@ -23,7 +23,9 @@ test("同步页面和同步 API 都经过私有地址检查", () => {
 test("403 使用自定义深空拒绝页", () => {
   assert.match(nginx, /error_page 403 \/__security\/denied\.html;/);
   assert.match(denied, /跃迁航道未获授权/);
-  assert.match(denied, /deep-space-checkpoint\.png/);
+  assert.match(denied, /deep-space-checkpoint-v2\.png/);
+  assert.match(denied, /class="space-fx"/);
+  assert.match(denied, /prefers-reduced-motion: reduce/);
 });
 
 test("Nginx 隐藏框架标识并发送浏览器安全响应头", () => {
