@@ -82,50 +82,96 @@
     .stream:nth-child(1) { top: 39%; transform: rotate(5deg); }
     .stream:nth-child(2) { top: 48%; transform: rotate(-2deg); animation-delay: -1.8s; }
     .stream:nth-child(3) { top: 57%; transform: rotate(-8deg); animation-delay: -3.4s; }
-    .engine-effects {
-      position: fixed;
-      z-index: 0;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      pointer-events: none;
-      mix-blend-mode: screen;
-    }
-    .engine-jet { --engine-delay: 0s; }
-    .engine-jet:nth-of-type(2) { --engine-delay: -.57s; }
-    .engine-jet:nth-of-type(3) { --engine-delay: -1.08s; }
-    .engine-pixels {
-      opacity: .14;
-      filter: brightness(1.45) saturate(1.25) drop-shadow(0 0 5px rgba(80, 205, 255, .34));
-    }
-    .engine-plume {
-      fill: url(#engine-plasma);
-      filter: url(#engine-soft);
-      opacity: .2;
-      transform-box: fill-box;
-      transform-origin: right center;
-    }
-    .engine-nozzle {
-      fill: #9cefff;
-      filter: url(#engine-nozzle-glow);
-      opacity: .16;
-      transform-box: fill-box;
-      transform-origin: center;
-    }
-    .meteor {
+    .stream:nth-child(4) { top: 29%; left: 55%; width: 38vw; transform: rotate(-5deg); animation-delay: -2.7s; }
+    .stream:nth-child(5) { top: 69%; left: 48%; width: 42vw; transform: rotate(3deg); animation-delay: -4.2s; }
+    .dust::before,
+    .dust::after {
+      content: "";
       position: absolute;
-      top: 12%;
-      left: 58%;
-      width: 130px;
-      height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(151, 226, 255, .9));
-      box-shadow: 0 0 8px rgba(84, 201, 255, .7);
-      opacity: 0;
-      transform: rotate(-28deg) translate3d(0, 0, 0);
+      inset: -12%;
+      opacity: .34;
     }
-    .meteor:nth-child(2) { top: 22%; left: 72%; width: 82px; animation-delay: -3.6s; }
-    .meteor:nth-child(3) { top: 8%; left: 87%; width: 58px; animation-delay: -6.2s; }
+    .dust::before {
+      background:
+        radial-gradient(circle at 58% 14%, rgba(209, 248, 255, .78) 0 1px, transparent 2px),
+        radial-gradient(circle at 68% 23%, rgba(95, 206, 255, .64) 0 1.5px, transparent 2.5px),
+        radial-gradient(circle at 81% 17%, rgba(255, 194, 116, .5) 0 1px, transparent 2px),
+        radial-gradient(circle at 91% 31%, rgba(208, 248, 255, .68) 0 1px, transparent 2.5px),
+        radial-gradient(circle at 73% 47%, rgba(112, 221, 255, .72) 0 1.5px, transparent 3px),
+        radial-gradient(circle at 88% 58%, rgba(255, 205, 137, .44) 0 1px, transparent 2px),
+        radial-gradient(circle at 62% 66%, rgba(189, 242, 255, .66) 0 1px, transparent 2.5px),
+        radial-gradient(circle at 79% 79%, rgba(100, 208, 255, .58) 0 1.5px, transparent 3px),
+        radial-gradient(circle at 94% 86%, rgba(218, 250, 255, .7) 0 1px, transparent 2px),
+        radial-gradient(circle at 52% 88%, rgba(255, 185, 104, .38) 0 1px, transparent 2px);
+      filter: drop-shadow(0 0 4px rgba(95, 213, 255, .55));
+    }
+    .dust::after {
+      left: 38%;
+      background-image:
+        radial-gradient(circle, rgba(187, 241, 255, .58) 0 1px, transparent 1.8px),
+        radial-gradient(circle, rgba(76, 187, 255, .4) 0 1px, transparent 2px);
+      background-position: 17px 23px, 61px 47px;
+      background-size: 83px 79px, 137px 131px;
+      filter: blur(.35px);
+      mask-image: radial-gradient(ellipse at 76% 48%, #000 0 34%, transparent 76%);
+      opacity: .3;
+    }
+    .mote {
+      position: absolute;
+      left: var(--x);
+      top: var(--y);
+      width: var(--size, 3px);
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: rgba(188, 245, 255, .9);
+      box-shadow: 0 0 5px 1px rgba(70, 199, 255, .7), 0 0 13px rgba(54, 153, 255, .35);
+      opacity: .28;
+    }
+    .mote:nth-child(1) { --x: 55%; --y: 18%; --size: 2px; --duration: 9s; --delay: -2s; }
+    .mote:nth-child(2) { --x: 64%; --y: 31%; --size: 3px; --duration: 12s; --delay: -7s; }
+    .mote:nth-child(3) { --x: 74%; --y: 13%; --size: 2px; --duration: 11s; --delay: -4s; }
+    .mote:nth-child(4) { --x: 86%; --y: 25%; --size: 4px; --duration: 14s; --delay: -9s; }
+    .mote:nth-child(5) { --x: 94%; --y: 42%; --size: 2px; --duration: 10s; --delay: -5s; }
+    .mote:nth-child(6) { --x: 68%; --y: 51%; --size: 3px; --duration: 13s; --delay: -1s; }
+    .mote:nth-child(7) { --x: 81%; --y: 61%; --size: 2px; --duration: 9s; --delay: -6s; }
+    .mote:nth-child(8) { --x: 91%; --y: 72%; --size: 3px; --duration: 15s; --delay: -11s; }
+    .mote:nth-child(9) { --x: 59%; --y: 76%; --size: 2px; --duration: 12s; --delay: -8s; }
+    .mote:nth-child(10) { --x: 72%; --y: 86%; --size: 4px; --duration: 16s; --delay: -3s; }
+    .mote:nth-child(11) { --x: 88%; --y: 91%; --size: 2px; --duration: 11s; --delay: -10s; }
+    .mote:nth-child(12) { --x: 97%; --y: 15%; --size: 3px; --duration: 14s; --delay: -12s; }
+    .meteor {
+      --angle: -26deg;
+      --length: 110px;
+      --duration: 13s;
+      --delay: 0s;
+      position: absolute;
+      width: var(--length);
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(100, 202, 255, .26) 38%, rgba(218, 249, 255, .94));
+      box-shadow: 0 0 7px rgba(84, 201, 255, .62);
+      opacity: 0;
+      transform: rotate(var(--angle)) translate3d(0, 0, 0);
+      transform-origin: 100% 50%;
+    }
+    .meteor::after {
+      content: "";
+      position: absolute;
+      right: -1px;
+      top: 50%;
+      width: 3px;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: #f2feff;
+      box-shadow: 0 0 6px 2px rgba(137, 228, 255, .82);
+      transform: translateY(-50%);
+    }
+    .meteor:nth-child(1) { top: 12%; left: 64%; --length: 146px; --duration: 11s; --delay: -4s; }
+    .meteor:nth-child(2) { top: 23%; left: 79%; --length: 86px; --angle: -31deg; --duration: 14s; --delay: -10s; }
+    .meteor:nth-child(3) { top: 8%; left: 92%; --length: 58px; --angle: -18deg; --duration: 17s; --delay: -8s; }
+    .meteor:nth-child(4) { top: 68%; left: 88%; --length: 118px; --angle: -27deg; --duration: 13s; --delay: -2s; }
+    .meteor:nth-child(5) { top: 43%; left: 96%; --length: 52px; --angle: -35deg; --duration: 10s; --delay: -7s; }
+    .meteor:nth-child(6) { top: 82%; left: 72%; --length: 74px; --angle: -16deg; --duration: 16s; --delay: -13s; }
+    .meteor:nth-child(7) { top: 31%; left: 58%; --length: 44px; --angle: -22deg; --duration: 19s; --delay: -15s; }
     main {
       position: relative;
       z-index: 1;
@@ -237,19 +283,21 @@
       main { min-height: 100svh; padding: 30px 24px; }
       .telemetry { grid-template-columns: 1fr; }
       .code { font-size: 92px; }
-      .engine-effects { display: none; }
       .stream { left: 54%; width: 58vw; }
+      .stream:nth-child(n+4),
+      .meteor:nth-child(n+4),
+      .mote:nth-child(n+8) { display: none; }
     }
     @media (prefers-reduced-motion: no-preference) {
       .eyebrow::before { animation: pulse 2.8s ease-in-out infinite; }
       body::after { animation: gate-breathe 5.8s ease-in-out infinite; }
       .particles::before { animation: particle-drift 42s linear infinite; }
       .particles::after { animation: particle-drift-far 68s linear infinite reverse; }
+      .dust::before { animation: dust-orbit 54s linear infinite; }
+      .dust::after { animation: dust-breathe 7.5s ease-in-out infinite; }
+      .mote { animation: mote-drift var(--duration) ease-in-out var(--delay) infinite; }
       .stream { animation: stream-flow 4.8s ease-in-out infinite; }
-      .engine-pixels { animation: original-plume-flicker 1.65s ease-in-out var(--engine-delay) infinite; }
-      .engine-plume { animation: plume-breathe 1.85s ease-in-out var(--engine-delay) infinite; }
-      .engine-nozzle { animation: nozzle-pulse 1.1s ease-in-out var(--engine-delay) infinite; }
-      .meteor { animation: meteor-pass 8.5s linear infinite; }
+      .meteor { animation: meteor-pass var(--duration) linear var(--delay) infinite; }
       @keyframes pulse { 50% { opacity: .35; box-shadow: 0 0 4px #59dfff; } }
       @keyframes gate-breathe {
         50% { opacity: 1; filter: brightness(1.14) saturate(1.12); }
@@ -260,31 +308,26 @@
       @keyframes particle-drift-far {
         to { transform: scale(1.35) translate3d(-4%, 6%, 0); }
       }
+      @keyframes dust-orbit {
+        to { transform: translate3d(-3%, 4%, 0) rotate(.8deg); }
+      }
+      @keyframes dust-breathe {
+        50% { opacity: .52; filter: blur(.15px) brightness(1.25); }
+      }
+      @keyframes mote-drift {
+        0%, 100% { opacity: .12; transform: translate3d(0, 8px, 0) scale(.72); }
+        38% { opacity: .7; transform: translate3d(-12px, -14px, 0) scale(1.18); }
+        67% { opacity: .3; transform: translate3d(8px, -26px, 0) scale(.9); }
+      }
       @keyframes stream-flow {
         0%, 12% { opacity: 0; clip-path: inset(0 100% 0 0); }
         34%, 68% { opacity: .74; clip-path: inset(0 0 0 0); }
         100% { opacity: 0; clip-path: inset(0 0 0 88%); }
       }
-      @keyframes plume-breathe {
-        0%, 100% { opacity: .12; transform: scaleX(.96) scaleY(.86); }
-        38% { opacity: .34; transform: scaleX(1.035) scaleY(1.08); }
-        62% { opacity: .2; transform: scaleX(.985) scaleY(.94); }
-        82% { opacity: .4; transform: scaleX(1.055) scaleY(1.02); }
-      }
-      @keyframes original-plume-flicker {
-        0%, 100% { opacity: .08; filter: brightness(1.2) saturate(1.1) drop-shadow(0 0 3px rgba(80, 205, 255, .2)); }
-        34% { opacity: .34; filter: brightness(1.8) saturate(1.45) drop-shadow(0 0 9px rgba(80, 205, 255, .52)); }
-        61% { opacity: .16; filter: brightness(1.4) saturate(1.2) drop-shadow(0 0 5px rgba(80, 205, 255, .3)); }
-        83% { opacity: .4; filter: brightness(1.95) saturate(1.55) drop-shadow(0 0 11px rgba(80, 205, 255, .6)); }
-      }
-      @keyframes nozzle-pulse {
-        0%, 100% { opacity: .1; transform: scale(.88); }
-        48% { opacity: .42; transform: scale(1.08); }
-      }
       @keyframes meteor-pass {
-        0%, 70% { opacity: 0; transform: rotate(-28deg) translate3d(0, 0, 0); }
-        73% { opacity: .9; }
-        82%, 100% { opacity: 0; transform: rotate(-28deg) translate3d(-34vw, 0, 0); }
+        0%, 72% { opacity: 0; transform: rotate(var(--angle)) translate3d(0, 0, 0) scaleX(.3); }
+        74% { opacity: .92; }
+        84%, 100% { opacity: 0; transform: rotate(var(--angle)) translate3d(-42vw, 0, 0) scaleX(1.08); }
       }
     }
     @media (prefers-reduced-motion: reduce) {
@@ -293,53 +336,19 @@
   </style>
 </head>
 <body>
-  <svg class="engine-effects" viewBox="0 0 1672 941" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <defs>
-      <image id="engine-art-source" href="/__security/assets/deep-space-checkpoint-v2.png" width="1672" height="941"/>
-      <clipPath id="engine-tail-one">
-        <path d="M270 482 C378 466 499 451 579 452 L579 472 C497 483 377 510 270 518Z"/>
-      </clipPath>
-      <clipPath id="engine-tail-two">
-        <path d="M305 548 C419 526 540 511 619 516 L619 537 C536 547 417 580 305 585Z"/>
-      </clipPath>
-      <clipPath id="engine-tail-three">
-        <path d="M423 620 C548 594 682 575 771 578 L771 603 C680 613 548 650 423 660Z"/>
-      </clipPath>
-      <linearGradient id="engine-plasma" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0" stop-color="#218cff" stop-opacity="0"/>
-        <stop offset=".44" stop-color="#2a9cff" stop-opacity=".2"/>
-        <stop offset=".82" stop-color="#56d8ff" stop-opacity=".58"/>
-        <stop offset="1" stop-color="#dbfbff" stop-opacity=".82"/>
-      </linearGradient>
-      <filter id="engine-soft" x="-20%" y="-80%" width="145%" height="260%">
-        <feGaussianBlur stdDeviation="7"/>
-      </filter>
-      <filter id="engine-nozzle-glow" x="-300%" y="-300%" width="700%" height="700%">
-        <feGaussianBlur stdDeviation="3"/>
-      </filter>
-    </defs>
-    <g class="engine-jet">
-      <use class="engine-pixels" href="#engine-art-source" clip-path="url(#engine-tail-one)"/>
-      <path class="engine-plume" d="M354 488 C423 471 507 456 570 456 C516 472 433 492 354 501 C343 498 344 492 354 488Z"/>
-      <ellipse class="engine-nozzle" cx="570" cy="461" rx="5" ry="3"/>
-    </g>
-    <g class="engine-jet">
-      <use class="engine-pixels" href="#engine-art-source" clip-path="url(#engine-tail-two)"/>
-      <path class="engine-plume" d="M388 552 C457 532 548 517 610 521 C553 537 468 560 388 568 C376 564 377 556 388 552Z"/>
-      <ellipse class="engine-nozzle" cx="610" cy="527" rx="5" ry="3"/>
-    </g>
-    <g class="engine-jet">
-      <use class="engine-pixels" href="#engine-art-source" clip-path="url(#engine-tail-three)"/>
-      <path class="engine-plume" d="M505 619 C584 598 695 579 761 583 C697 603 597 627 505 637 C492 633 493 624 505 619Z"/>
-      <ellipse class="engine-nozzle" cx="761" cy="590" rx="6" ry="4"/>
-    </g>
-  </svg>
   <div class="space-fx" aria-hidden="true">
     <div class="particles"></div>
+    <div class="dust"></div>
+    <div class="gate-motes">
+      <i class="mote"></i><i class="mote"></i><i class="mote"></i><i class="mote"></i>
+      <i class="mote"></i><i class="mote"></i><i class="mote"></i><i class="mote"></i>
+      <i class="mote"></i><i class="mote"></i><i class="mote"></i><i class="mote"></i>
+    </div>
     <div class="streams">
-      <i class="stream"></i><i class="stream"></i><i class="stream"></i>
+      <i class="stream"></i><i class="stream"></i><i class="stream"></i><i class="stream"></i><i class="stream"></i>
     </div>
     <div class="meteors">
+      <i class="meteor"></i><i class="meteor"></i><i class="meteor"></i><i class="meteor"></i>
       <i class="meteor"></i><i class="meteor"></i><i class="meteor"></i>
     </div>
   </div>
