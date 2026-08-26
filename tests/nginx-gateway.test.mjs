@@ -27,7 +27,13 @@ test("403 使用自定义深空拒绝页", () => {
   assert.match(denied, /跃迁航道未获授权/);
   assert.match(denied, /deep-space-checkpoint-v2\.png/);
   assert.match(denied, /class="space-fx"/);
+  assert.match(denied, /clip-path: polygon\(0 8%/);
+  assert.match(denied, /\.engine-flare::after/);
+  assert.match(denied, /width: max\(100vw, 177\.683vh\)/);
+  assert.equal((denied.match(/<i class="engine-flare"><\/i>/g) ?? []).length, 3);
+  assert.match(denied, /scaleX\(1\.1\) scaleY\(1\.04\)/);
   assert.match(denied, /prefers-reduced-motion: reduce/);
+  assert.doesNotMatch(denied, /\.space-fx \{ display: none; \}/);
 });
 
 test("Nginx 隐藏框架标识并发送浏览器安全响应头", () => {

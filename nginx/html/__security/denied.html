@@ -82,22 +82,56 @@
     .stream:nth-child(1) { top: 39%; transform: rotate(5deg); }
     .stream:nth-child(2) { top: 48%; transform: rotate(-2deg); animation-delay: -1.8s; }
     .stream:nth-child(3) { top: 57%; transform: rotate(-8deg); animation-delay: -3.4s; }
+    .space-fx > .engines {
+      inset: auto;
+      left: 50%;
+      top: 50%;
+      width: max(100vw, 177.683vh);
+      height: max(100vh, 56.280vw);
+      overflow: visible;
+      transform: translate(-50%, -50%);
+    }
     .engine-flare {
       position: absolute;
-      left: 33%;
-      width: 16vw;
-      height: 3px;
-      border-radius: 100%;
-      background: linear-gradient(90deg, transparent, rgba(48, 145, 255, .1) 24%, rgba(77, 201, 255, .72) 72%, #e9fdff 100%);
-      filter: drop-shadow(0 0 7px rgba(76, 201, 255, .9));
-      opacity: .62;
-      transform: rotate(-1deg);
+      width: 10.5%;
+      height: 4%;
+      background:
+        radial-gradient(ellipse at 100% 50%, rgba(255, 255, 255, .96) 0 3%, rgba(154, 243, 255, .88) 9%, rgba(44, 174, 255, .48) 28%, transparent 64%),
+        radial-gradient(ellipse at 58% 38%, rgba(113, 228, 255, .44), transparent 31%),
+        radial-gradient(ellipse at 31% 65%, rgba(25, 116, 255, .3), transparent 38%),
+        linear-gradient(90deg, transparent 0, rgba(30, 129, 255, .07) 18%, rgba(45, 177, 255, .28) 58%, rgba(139, 238, 255, .72) 91%, rgba(238, 254, 255, .92) 100%);
+      clip-path: polygon(0 8%, 28% 16%, 64% 30%, 90% 40%, 100% 45%, 100% 55%, 90% 60%, 64% 70%, 28% 84%, 0 92%);
+      filter: blur(.35px) drop-shadow(0 0 6px rgba(95, 219, 255, .82)) drop-shadow(0 0 18px rgba(42, 144, 255, .42));
+      opacity: .68;
+      transform: rotate(var(--tilt, 0deg));
       transform-origin: 100% 50%;
+      mix-blend-mode: screen;
     }
-    .engine-flare:nth-child(1) { top: 46%; }
-    .engine-flare:nth-child(2) { top: 51.5%; animation-delay: -.42s; }
-    .engine-flare:nth-child(3) { top: 57.2%; animation-delay: -.88s; }
-    .engine-flare:nth-child(4) { top: 62.6%; animation-delay: -1.24s; }
+    .engine-flare::before,
+    .engine-flare::after {
+      content: "";
+      position: absolute;
+      pointer-events: none;
+    }
+    .engine-flare::before {
+      inset: 44% 0;
+      border-radius: 999px;
+      background: linear-gradient(90deg, transparent, rgba(100, 218, 255, .26) 38%, #dffcff 92%, #fff);
+      box-shadow: 0 0 8px rgba(111, 229, 255, .9);
+    }
+    .engine-flare::after {
+      right: -3px;
+      top: 50%;
+      width: clamp(8px, .65vw, 15px);
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: #eaffff;
+      box-shadow: 0 0 7px 2px #83eaff, 0 0 22px 7px rgba(52, 155, 255, .58);
+      transform: translateY(-50%);
+    }
+    .engine-flare:nth-child(1) { right: 65.9%; top: 46.85%; --tilt: -.35deg; }
+    .engine-flare:nth-child(2) { right: 63.5%; top: 54.3%; --tilt: .45deg; animation-delay: -.58s; }
+    .engine-flare:nth-child(3) { right: 54.5%; top: 60.7%; --tilt: 1.1deg; animation-delay: -1.12s; }
     .meteor {
       position: absolute;
       top: 12%;
@@ -249,8 +283,10 @@
         100% { opacity: 0; clip-path: inset(0 0 0 88%); }
       }
       @keyframes engine-pulse {
-        0%, 100% { opacity: .45; transform: rotate(-1deg) scaleX(.82); }
-        45% { opacity: .9; transform: rotate(-1deg) scaleX(1.08); }
+        0%, 100% { opacity: .5; transform: rotate(var(--tilt, 0deg)) scaleX(.76) scaleY(.72); filter: brightness(.88) blur(.5px) drop-shadow(0 0 6px rgba(95, 219, 255, .68)); background-position: 0 50%, 8% 42%, 4% 60%, 0 50%; }
+        24% { opacity: .84; transform: rotate(var(--tilt, 0deg)) scaleX(1.02) scaleY(1.12); filter: brightness(1.18) blur(.15px) drop-shadow(0 0 12px rgba(95, 219, 255, .92)); background-position: 0 50%, 18% 32%, 13% 72%, 0 50%; }
+        51% { opacity: .62; transform: rotate(var(--tilt, 0deg)) scaleX(.88) scaleY(.84); filter: brightness(.98) blur(.4px) drop-shadow(0 0 8px rgba(95, 219, 255, .76)); background-position: 0 50%, 4% 52%, 20% 48%, 0 50%; }
+        76% { opacity: .9; transform: rotate(var(--tilt, 0deg)) scaleX(1.1) scaleY(1.04); filter: brightness(1.24) blur(.2px) drop-shadow(0 0 14px rgba(95, 219, 255, .96)); background-position: 0 50%, 24% 36%, 9% 66%, 0 50%; }
       }
       @keyframes meteor-pass {
         0%, 70% { opacity: 0; transform: rotate(-28deg) translate3d(0, 0, 0); }
@@ -259,7 +295,7 @@
       }
     }
     @media (prefers-reduced-motion: reduce) {
-      .space-fx { display: none; }
+      .space-fx * { animation: none !important; }
     }
   </style>
 </head>
@@ -270,7 +306,7 @@
       <i class="stream"></i><i class="stream"></i><i class="stream"></i>
     </div>
     <div class="engines">
-      <i class="engine-flare"></i><i class="engine-flare"></i><i class="engine-flare"></i><i class="engine-flare"></i>
+      <i class="engine-flare"></i><i class="engine-flare"></i><i class="engine-flare"></i>
     </div>
     <div class="meteors">
       <i class="meteor"></i><i class="meteor"></i><i class="meteor"></i>
