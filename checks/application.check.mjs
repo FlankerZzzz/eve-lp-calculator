@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import test from "node:test";
+import check from "node:test";
 
 const root = new URL("../", import.meta.url);
 const source = path => readFile(new URL(path, root), "utf8");
 
-test("最大利润保留最低卖单参考，最小利润按产出数量逐档吃收单", async () => {
+check("最大利润保留最低卖单参考，最小利润按产出数量逐档吃收单", async () => {
   const [page, route, esi] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts"), source("lib/esi-server.ts")]);
   assert.match(page, /offer\.sell_price \* revenueQuantity/);
   assert.match(page, /immediateBuyPrice \* revenueQuantity/);
@@ -16,7 +16,7 @@ test("最大利润保留最低卖单参考，最小利润按产出数量逐档�
   assert.match(esi, /sellPrice: sells\.length \? Math\.min/);
 });
 
-test("首页只读取每日固定榜单快照", async () => {
+check("首页只读取每日固定榜单快照", async () => {
   const [page, route, worker] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts"), source("scripts/sync-worker.mjs")]);
   assert.match(page, /热门物品榜/);
   assert.match(route, /FROM ranking_snapshots/);
@@ -24,7 +24,12 @@ test("首页只读取每日固定榜单快照", async () => {
   assert.doesNotMatch(route, /ORDER BY daily_volume DESC, lp_ratio DESC LIMIT 5/);
 });
 
-test("订单深度不足时保留利润估算并显示材料与收单风险", async () => {
+check("兑换方案物品信息不显示由 LP 输入推算的可兑换次数", async () => {
+  const page = await source("app/page.tsx");
+  assert.doesNotMatch(page, /affordableRedemptions|showRedemption|可兑换.*次/);
+});
+
+check("订单深度不足时保留利润估算并显示材料与收单风险", async () => {
   const page = await source("app/page.tsx");
   assert.match(page, /const maxProfit = offer\.sell_price > 0 \?/);
   assert.match(page, /const minProfit = immediateBuyPrice > 0 \?/);
@@ -35,7 +40,7 @@ test("订单深度不足时保留利润估算并显示材料与收单风险", as
   assert.match(page, /offer\.materialsCovered && offer\.outputCovered/);
 });
 
-test("订单使用伏尔戈全量双槽快照并按半小时调度", async () => {
+check("订单使用伏尔戈全量双槽快照并按半小时调度", async () => {
   const [daemon, worker, schema] = await Promise.all([source("scripts/order-sync-daemon.mjs"), source("scripts/sync-worker.mjs"), source("db/d1.ts")]);
   assert.match(daemon, /order_type=all&page=\$\{page\}/);
   assert.doesNotMatch(daemon, /orders\/\?[^`\n]*type_id=/);
@@ -48,21 +53,21 @@ test("订单使用伏尔戈全量双槽快照并按半小时调度", async () =>
   assert.match(schema, /CREATE TABLE IF NOT EXISTS market_order_book/);
 });
 
-test("榜单按上海时间每日四次更新", async () => {
+check("榜单按上海时间每日四次更新", async () => {
   const rankings = await source("app/api/sync/rankings/route.ts");
   assert.match(rankings, /RANKING_HOURS = \[9, 15, 18, 21\]/);
   assert.match(rankings, /dueRankingSlot/);
   assert.match(rankings, /本时段榜单已更新/);
 });
 
-test("同步控制台不再提供关联同步", async () => {
+check("同步控制台不再提供关联同步", async () => {
   const [page, control, status] = await Promise.all([source("app/sync/page.tsx"), source("app/api/sync/control/route.ts"), source("app/api/sync/status/route.ts")]);
   assert.doesNotMatch(page, /linked|关联同步|SQLite\/D1/);
   assert.doesNotMatch(control, /linked/);
   assert.match(status, /kind != 'linked'/);
 });
 
-test("首页两个榜单使用独立且可切换的排序状态", async () => {
+check("首页两个榜单使用独立且可切换的排序状态", async () => {
   const page = await source("app/page.tsx");
   assert.match(page, /setPopularSort.*key: "volume", direction: "desc"/);
   assert.match(page, /setRatioSort.*key: "lpRatio", direction: "desc"/);
@@ -74,7 +79,7 @@ test("首页两个榜单使用独立且可切换的排序状态", async () => {
   assert.doesNotMatch(page, /sortedPopular.*b\.volume - a\.volume/);
 });
 
-test("手机端使用独立卡片且桌面表格保持默认显示", async () => {
+check("手机端使用独立卡片且桌面表格保持默认显示", async () => {
   const [page, css] = await Promise.all([source("app/page.tsx"), source("app/globals.css")]);
   assert.match(page, /className="mobile-offer-card"/);
   assert.match(page, /className="mobile-sort"/);
@@ -88,7 +93,7 @@ test("手机端使用独立卡片且桌面表格保持默认显示", async () =>
   assert.match(css, /height:100dvh/);
 });
 
-test("增效剂蓝图默认过滤且可以手动显示", async () => {
+check("增效剂蓝图默认过滤且可以手动显示", async () => {
   const [page, route, worker, rankings] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts"), source("scripts/sync-worker.mjs"), source("app/api/sync/rankings/route.ts")]);
   assert.match(route, /include_booster_blueprints/);
   assert.match(route, /br\.blueprint_type_id IS NOT NULL/);
@@ -103,7 +108,7 @@ test("增效剂蓝图默认过滤且可以手动显示", async () => {
   assert.match(route, /filter\(offer => includeBoosterBlueprints \|\| !isBoosterBlueprint\(offer\)\)\.slice\(0, 100\)/);
 });
 
-test("首页榜单扩展为前一百并支持分页", async () => {
+check("首页榜单扩展为前一百并支持分页", async () => {
   const [page, route] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts")]);
   assert.match(page, /前 100 条/);
   assert.match(page, /rankingPager/);
@@ -111,14 +116,14 @@ test("首页榜单扩展为前一百并支持分页", async () => {
   assert.match(route, /filter\(offer => includeBoosterBlueprints \|\| !isBoosterBlueprint\(offer\)\)\.slice\(0, 100\)/);
 });
 
-test("组合计算的全量材料查询按小批次执行", async () => {
+check("组合计算的全量材料查询按小批次执行", async () => {
   const route = await source("app/api/data/offers/route.ts");
   assert.match(route, /index \+= 20/);
   assert.match(route, /offers\.slice\(index, index \+ 20\)/);
   assert.match(route, /pageSize = requestedSize === "all"/);
 });
 
-test("组合计算按材料和产出数量逐档成交，并显示保守利润和 LP 比例", async () => {
+check("组合计算按材料和产出数量逐档成交，并显示保守利润和 LP 比例", async () => {
   const page = await source("app/page.tsx");
   assert.match(page, /material\.sell_execution_price \|\| material\.sell_price/);
   assert.match(page, /immediateBuyPrice > 0/);
@@ -128,7 +133,7 @@ test("组合计算按材料和产出数量逐档成交，并显示保守利润�
   assert.doesNotMatch(page, /总体价值（收单）|totalValue/);
 });
 
-test("没有独立徽标的古力突击队回退到古斯塔斯势力徽标", async () => {
+check("没有独立徽标的古力突击队回退到古斯塔斯势力徽标", async () => {
   const [page, route] = await Promise.all([source("app/page.tsx"), source("app/api/data/entity-icon/route.ts")]);
   assert.match(page, /NPC_CORPORATION_FACTION_FALLBACKS = new Map\(\[\[1000437, 500010\]\]\)/);
   assert.match(page, /fallback_faction_id/);
@@ -137,14 +142,14 @@ test("没有独立徽标的古力突击队回退到古斯塔斯势力徽标", as
   assert.match(route, /corporations\/\$\{fallbackFactionId\}\/logo/);
 });
 
-test("历史同步跳过不可交易和不存在的物品", async () => {
+check("历史同步跳过不可交易和不存在的物品", async () => {
   const [history, esi] = await Promise.all([source("app/api/sync/history/route.ts"), source("lib/esi-server.ts")]);
   assert.match(history, /if \(!isMarketUnavailable\(error\)\) throw error/);
   assert.match(esi, /type not tradable on market/i);
   assert.match(esi, /type not found/i);
 });
 
-test("历史同步每轮最多 50 条、使用 30 并发和 1 秒间隔", async () => {
+check("历史同步每轮最多 50 条、使用 30 并发和 1 秒间隔", async () => {
   const [history, worker] = await Promise.all([source("app/api/sync/history/route.ts"), source("scripts/sync-worker.mjs")]);
   assert.match(history, /LIMIT 50/);
   assert.match(history, /const HISTORY_CONCURRENCY = 30/);
@@ -152,7 +157,7 @@ test("历史同步每轮最多 50 条、使用 30 并发和 1 秒间隔", async 
   assert.match(worker, /job\.kind === "history" \? 1000/);
 });
 
-test("市场订单使用独立按钮", async () => {
+check("市场订单使用独立按钮", async () => {
   const [page, esi, route] = await Promise.all([source("app/page.tsx"), source("lib/esi-server.ts"), source("app/api/data/market-orders/route.ts")]);
   assert.doesNotMatch(page, /role="button"/);
   assert.match(page, /<button className="market-order-link"/);
@@ -164,12 +169,12 @@ test("市场订单使用独立按钮", async () => {
   assert.match(page, /\[10, 20, 50\]/);
 });
 
-test("手机端订单不足材料行避开左侧风险指示线", async () => {
+check("手机端订单不足材料行避开左侧风险指示线", async () => {
   const css = await source("app/globals.css");
   assert.match(css, /\.material-row\.order-shortage\{padding:12px 8px 12px 12px\}/);
 });
 
-test("历史收益支持 30、15、7、3 日和当日均价对比", async () => {
+check("历史收益支持 30、15、7、3 日和当日均价对比", async () => {
   const [page, route] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts")]);
   assert.match(page, /type HistoryWindow = 30 \| 15 \| 7 \| 3 \| 1/);
   assert.match(page, /历史价对比/);
@@ -185,7 +190,7 @@ test("历史收益支持 30、15、7、3 日和当日均价对比", async () => 
   assert.match(route, /latest\.get\(typeId\)\?\.average_price/);
 });
 
-test("前端历史周期移除三日选项并为最近交易日标注实际日期", async () => {
+check("前端历史周期移除三日选项并为最近交易日标注实际日期", async () => {
   const page = await source("app/page.tsx");
   assert.match(page, /\[30, 15, 7, 1\] as HistoryWindow\[\]/);
   assert.doesNotMatch(page, /\[30, 15, 7, 3, 1\] as HistoryWindow\[\]/);
@@ -193,7 +198,7 @@ test("前端历史周期移除三日选项并为最近交易日标注实际日�
   assert.match(page, /title=\{recentDateHint\}/);
 });
 
-test("历史同步错过 00:30 后会补跑且冲突不会被误判成功", async () => {
+check("历史同步错过 00:30 后会补跑且冲突不会被误判成功", async () => {
   const worker = await source("scripts/sync-worker.mjs");
   assert.match(worker, /historyUpdatedDate !== today/);
   assert.match(worker, /response\.status === 409/);
@@ -201,7 +206,7 @@ test("历史同步错过 00:30 后会补跑且冲突不会被误判成功", asyn
   assert.match(worker, /60 秒后重新调度/);
 });
 
-test("桌面榜单使用高密度组合列和30天自然日均量", async () => {
+check("桌面榜单使用高密度组合列和30天自然日均量", async () => {
   const [page, route, css] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts"), source("app/globals.css")]);
   assert.match(page, /30天日均交易量/);
   assert.match(page, /指示价格利润/);
@@ -227,7 +232,7 @@ test("桌面榜单使用高密度组合列和30天自然日均量", async () => 
   assert.match(route, /daily_volumes: historyData\.volumes\.get\(typeId\)/);
 });
 
-test("企业页识别完整六件脑插套装并为单件保留订单按钮", async () => {
+check("企业页识别完整六件脑插套装并为单件保留订单按钮", async () => {
   const [page, route] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts")]);
   assert.match(route, /const levels = \["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Omega"\]/);
   assert.match(route, /filter\(\(\[, set\]\) => set\.size === 6\)/);

@@ -46,6 +46,7 @@ next-env.d.ts
 /outputs/
 /work/
 /backups/
+/.codex-deploy/
 
 # local persistent runtime data
 /.data/

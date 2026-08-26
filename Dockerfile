@@ -2,13 +2,7 @@ FROM node:22-bookworm-slim
 
 WORKDIR /app
 COPY package*.json ./
-ARG HTTP_PROXY
-ARG HTTPS_PROXY
-ENV HTTP_PROXY=$HTTP_PROXY
-ENV HTTPS_PROXY=$HTTPS_PROXY
 RUN npm install --no-audit --no-fund
-ENV HTTP_PROXY=
-ENV HTTPS_PROXY=
 COPY . .
 RUN npm run build
 

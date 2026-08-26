@@ -1,6 +1,6 @@
 {
-  "name": "site-creator-vinext-starter",
-  "version": "1.5.6",
+  "name": "eve-lp-calculator",
+  "version": "1.5.7",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -9,17 +9,15 @@
     "dev": "node scripts/dev.mjs",
     "build": "vinext build",
     "start": "vinext start",
-    "test": "pnpm run build && node --test tests/*.test.mjs",
+    "check": "pnpm run build && node --test checks/*.check.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
-    "better-sqlite3": "12.4.1",
     "drizzle-orm": "0.45.2",
     "next": "16.3.2",
     "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "react-loading-skeleton": "3.5.0"
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.53.1",
