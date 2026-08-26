@@ -164,6 +164,11 @@ test("市场订单使用独立按钮", async () => {
   assert.match(page, /\[10, 20, 50\]/);
 });
 
+test("手机端订单不足材料行避开左侧风险指示线", async () => {
+  const css = await source("app/globals.css");
+  assert.match(css, /\.material-row\.order-shortage\{padding:12px 8px 12px 12px\}/);
+});
+
 test("历史收益支持 30、15、7、3 日和当日均价对比", async () => {
   const [page, route] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts")]);
   assert.match(page, /type HistoryWindow = 30 \| 15 \| 7 \| 3 \| 1/);
