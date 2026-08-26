@@ -22,6 +22,8 @@ test("同步页面和同步 API 都经过私有地址检查", () => {
 
 test("403 使用自定义深空拒绝页", () => {
   assert.match(nginx, /error_page 403 \/__security\/denied\.html;/);
+  assert.match(nginx, /location = \/__security\/assets\/deep-space-checkpoint-v2\.png/);
+  assert.match(nginx, /alias \/usr\/share\/nginx\/html\/__security\/assets\/deep-space-checkpoint-v2\.png/);
   assert.match(denied, /跃迁航道未获授权/);
   assert.match(denied, /deep-space-checkpoint-v2\.png/);
   assert.match(denied, /class="space-fx"/);
