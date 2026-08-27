@@ -1,6 +1,6 @@
 {
   "name": "eve-lp-calculator",
-  "version": "1.5.7",
+  "version": "1.6.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"

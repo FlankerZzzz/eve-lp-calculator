@@ -18,7 +18,7 @@ check("最大利润保留最低卖单参考，最小利润按产出数量逐档�
 
 check("首页只读取每日固定榜单快照", async () => {
   const [page, route, worker] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts"), source("scripts/sync-worker.mjs")]);
-  assert.match(page, /热门物品榜/);
+  assert.match(page, /热销榜/);
   assert.match(route, /FROM ranking_snapshots/);
   assert.match(worker, /rebuildRankings/);
   assert.doesNotMatch(route, /ORDER BY daily_volume DESC, lp_ratio DESC LIMIT 5/);
@@ -235,6 +235,8 @@ check("桌面榜单使用高密度组合列和30天自然日均量", async () =>
 check("企业页识别完整六件脑插套装并为单件保留订单按钮", async () => {
   const [page, route] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts")]);
   assert.match(route, /const levels = \["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Omega"\]/);
+  assert.match(route, /COALESCE\(pt\.type_id, t\.type_id\) type_id/);
+  assert.match(route, /blueprint_materials bm/);
   assert.match(route, /filter\(\(\[, set\]\) => set\.size === 6\)/);
   assert.match(route, /market_value/);
   assert.match(page, /implantSetPanel/);
