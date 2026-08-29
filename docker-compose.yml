@@ -49,50 +49,27 @@ services:
       - frontend
       - backend
 
-  sync-worker:
+  sync:
     image: eve-lp-calculator-eve-lp-calculator
-    container_name: eve-lp-sync-worker
+    container_name: eve-lp-sync
     restart: unless-stopped
-    command: ["node", "scripts/sync-worker.mjs"]
+    command: ["node", "scripts/sync-daemon.mjs"]
     environment:
-      SYNC_BASE_URL: http://sync-api:3001
+      SYNC_BASE_URL: http://web:3000
       SQLITE_RUNTIME: "1"
       SQLITE_PATH: /data/eve-lp.db
       ESI_BASE_URL: https://ali-esi.evepc.163.com
     volumes:
       - ./docker-data/sqlite:/data
     depends_on:
-      - sync-api
-    networks:
-      - backend
-
-  order-sync:
-    image: eve-lp-calculator-eve-lp-calculator
-    container_name: eve-lp-order-sync
-    restart: unless-stopped
-    command: ["node", "scripts/order-sync-daemon.mjs"]
-    environment:
-      SQLITE_PATH: /data/eve-lp.db
-      ESI_BASE_URL: https://ali-esi.evepc.163.com
-    volumes:
-      - ./docker-data/sqlite:/data
-    networks:
-      - backend
-
-  sync-api:
-    image: eve-lp-calculator-eve-lp-calculator
-    container_name: eve-lp-sync-api
-    restart: unless-stopped
-    command: ["node", "scripts/web.mjs"]
-    environment:
-      PORT: "3001"
-      SQLITE_RUNTIME: "1"
-      SQLITE_PATH: /data/eve-lp.db
-      ESI_BASE_URL: https://ali-esi.evepc.163.com
-    volumes:
-      - ./docker-data/sqlite:/data
-    expose:
-      - "3001"
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "const { DatabaseSync } = require('node:sqlite'); const db = new DatabaseSync('/data/eve-lp.db'); const row = db.prepare('SELECT heartbeat_at FROM contract_sync_state WHERE id=1').get(); db.close(); if (!row?.heartbeat_at || Date.now() - Date.parse(row.heartbeat_at) > 300000) process.exit(1); fetch('http://web:3000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1));"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     networks:
       - backend
 

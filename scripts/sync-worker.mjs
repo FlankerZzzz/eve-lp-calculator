@@ -1,4 +1,5 @@
 import net from "node:net";
+import { pathToFileURL } from "node:url";
 
 const baseUrl = process.env.SYNC_BASE_URL || "http://localhost:3000";
 const idleDelay = 1000;
@@ -178,7 +179,7 @@ async function rebuildRankings(job) {
   if (!response.ok) throw new Error(`保存榜单 HTTP ${response.status}`);
 }
 
-async function run() {
+export async function runSyncWorker() {
   await acquireSingleInstanceLock();
   console.log(`[sync-worker] 等待本地服务 ${baseUrl}`);
   while (true) {
@@ -214,4 +215,6 @@ async function run() {
   }
 }
 
-void run();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  void runSyncWorker();
+}

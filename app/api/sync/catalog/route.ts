@@ -9,6 +9,62 @@ type ResolvedName = { category: string; id: number; name: string };
 type Offer = { offer_id: number; type_id: number; quantity: number; lp_cost: number; isk_cost: number; ak_cost?: number; required_items?: { type_id: number; quantity: number }[] };
 type BlueprintPart = { type_id?: number; quantity?: number };
 type Blueprint = { activities?: Record<string, { materials?: Record<string, BlueprintPart>; products?: Record<string, BlueprintPart> }> };
+type ImplantCatalogRow = { corporation_id: number; market_type_id: number; is_blueprint: number; name_en: string; name_zh: string | null };
+
+const IMPLANT_LEVELS = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Omega"] as const;
+
+function canonicalSignature(typeIds: number[]) {
+  return [...new Set(typeIds)].sort((a, b) => a - b).join(",");
+}
+
+async function rebuildImplantCatalog(db: D1Database, generationId: string, now: string) {
+  const rows = (await db.prepare(`SELECT o.corporation_id, COALESCE(pt.type_id,t.type_id) market_type_id,
+    CASE WHEN br.blueprint_type_id IS NULL THEN 0 ELSE 1 END is_blueprint,
+    COALESCE(pt.name_en,t.name_en,'') name_en, COALESCE(pt.name_zh,t.name_zh) name_zh
+    FROM lp_offers o JOIN item_types t ON t.type_id=o.type_id
+    LEFT JOIN blueprint_recipes br ON br.blueprint_type_id=o.type_id
+    LEFT JOIN item_types pt ON pt.type_id=br.product_type_id
+    WHERE COALESCE(pt.name_en,t.name_en,'') LIKE '% Alpha'
+       OR COALESCE(pt.name_en,t.name_en,'') LIKE '% Beta'
+       OR COALESCE(pt.name_en,t.name_en,'') LIKE '% Gamma'
+       OR COALESCE(pt.name_en,t.name_en,'') LIKE '% Delta'
+       OR COALESCE(pt.name_en,t.name_en,'') LIKE '% Epsilon'
+       OR COALESCE(pt.name_en,t.name_en,'') LIKE '% Omega'`).all<ImplantCatalogRow>()).results;
+
+  const corporationSets = new Map<string, Map<string, ImplantCatalogRow>>();
+  for (const row of rows) {
+    const level = IMPLANT_LEVELS.find(value => row.name_en.endsWith(` ${value}`));
+    if (!level) continue;
+    const family = row.name_en.slice(0, -level.length - 1);
+    const key = `${row.corporation_id}|${family}|${row.is_blueprint ? "blueprint" : "direct"}`;
+    const set = corporationSets.get(key) ?? new Map<string, ImplantCatalogRow>();
+    set.set(level, row);
+    corporationSets.set(key, set);
+  }
+
+  const definitions = new Map<string, { name: string; sources: Set<string>; typeIds: number[] }>();
+  for (const [groupKey, set] of corporationSets) {
+    if (set.size !== 6) continue;
+    const [, family, source] = groupKey.split("|");
+    const items = IMPLANT_LEVELS.map(level => set.get(level)!);
+    const typeIds = items.map(item => item.market_type_id);
+    if (new Set(typeIds).size !== 6) continue;
+    const signature = canonicalSignature(typeIds);
+    const chineseName = items[0].name_zh?.replace(/[—-]?(?:阿尔法|贝它|伽玛|德尔塔|伊普西隆|欧米伽)型$/, "").replace(/[—\-\s]+$/, "");
+    const previous = definitions.get(signature);
+    if (previous) previous.sources.add(source);
+    else definitions.set(signature, { name: chineseName || family, sources: new Set([source]), typeIds: [...new Set(typeIds)].sort((a, b) => a - b) });
+  }
+
+  const statements: D1PreparedStatement[] = [db.prepare("DELETE FROM implant_catalog")];
+  for (const [signature, definition] of definitions) {
+    const sources = [...definition.sources].sort().join(",");
+    statements.push(db.prepare("INSERT INTO implant_catalog(set_key,set_name,is_blueprint,item_type_ids,source_flags,generation_id,updated_at) VALUES(?,?,?,?,?,?,?)")
+      .bind(signature, definition.name, definition.sources.has("blueprint") ? 1 : 0, definition.typeIds.join(","), sources, generationId, now));
+  }
+  await db.batch(statements);
+  return definitions.size;
+}
 
 async function fetchBlueprint(typeId: number) {
   const response = await fetch(`https://ref-data.everef.net/blueprints/${typeId}`, { headers: { accept: "application/json", "user-agent": "Chenxi-LP-Calculator/local" }, signal: AbortSignal.timeout(15000) });
@@ -140,8 +196,9 @@ export async function POST(request: Request) {
       await updateSyncJob({ kind: "catalog", status: "running", phase: "蓝图制造资料", runStartedAt, processedDelta: pendingBlueprints.length, remaining: result.remaining, endpoint: `SDE /blueprints/${pendingBlueprints[0].type_id}`, httpStatus: 200, response: result });
       return Response.json(result);
     }
-    await updateSyncJob({ kind: "catalog", status: "complete", phase: "完成", runStartedAt, remaining: 0, httpStatus: 200, response: { done: true } });
-    return Response.json({ done: true, phase: "complete" });
+    const implantSets = await rebuildImplantCatalog(db, runStartedAt, now);
+    await updateSyncJob({ kind: "catalog", status: "complete", phase: "完成", runStartedAt, remaining: 0, httpStatus: 200, response: { done: true, implantSets } });
+    return Response.json({ done: true, phase: "complete", implantSets });
   } catch (error) {
     const status = error instanceof EsiError && error.status === 420 ? 429 : 502;
     const message = error instanceof Error ? error.message : String(error);

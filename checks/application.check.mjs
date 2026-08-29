@@ -37,7 +37,7 @@ check("订单深度不足时保留利润估算并显示材料与收单风险", a
   assert.doesNotMatch(page, /风险估算/);
   assert.match(page, /收单不足/);
   assert.match(page, /卖单不足 · 请核对实际订单情况，避免无法兑换/);
-  assert.match(page, /offer\.materialsCovered && offer\.outputCovered/);
+  assert.match(page, /outputCoverageWarning\(offer\)/);
 });
 
 check("订单使用伏尔戈全量双槽快照并按半小时调度", async () => {
@@ -51,6 +51,28 @@ check("订单使用伏尔戈全量双槽快照并按半小时调度", async () =
   assert.match(worker, /function halfHourSlotKey/);
   assert.match(worker, /orderRunSlot !== currentOrderSlot/);
   assert.match(schema, /CREATE TABLE IF NOT EXISTS market_order_book/);
+});
+
+check("后台同步服务由单一容器和单一 Node 进程承载", async () => {
+  const [compose, daemon, worker, order, contracts] = await Promise.all([
+    source("docker-compose.yml"),
+    source("scripts/sync-daemon.mjs"),
+    source("scripts/sync-worker.mjs"),
+    source("scripts/order-sync-daemon.mjs"),
+    source("scripts/contract-sync-daemon.mjs"),
+  ]);
+  assert.match(compose, /\n  sync:\n/);
+  assert.match(compose, /container_name: eve-lp-sync/);
+  assert.match(compose, /command: \["node", "scripts\/sync-daemon\.mjs"\]/);
+  assert.match(compose, /SYNC_BASE_URL: http:\/\/web:3000/);
+  assert.doesNotMatch(compose, /\n  sync-worker:|\n  sync-api:|\n  order-sync:|\n  contract-sync:/);
+  assert.match(daemon, /runSyncWorker\(\)/);
+  assert.match(daemon, /runOrderSyncDaemon\(\)/);
+  assert.match(daemon, /runContractSyncDaemon\(\)/);
+  assert.match(daemon, /Promise\.all/);
+  assert.match(worker, /export async function runSyncWorker/);
+  assert.match(order, /export async function runOrderSyncDaemon/);
+  assert.match(contracts, /export async function runContractSyncDaemon/);
 });
 
 check("榜单按上海时间每日四次更新", async () => {
@@ -239,6 +261,41 @@ check("企业页识别完整六件脑插套装并为单件保留订单按钮", a
   assert.match(route, /blueprint_materials bm/);
   assert.match(route, /filter\(\(\[, set\]\) => set\.size === 6\)/);
   assert.match(route, /market_value/);
-  assert.match(page, /implantSetPanel/);
-  assert.match(page, /item\.type_id, name: item\.name/);
+  assert.match(page, /riskAwareImplantSetPanel/);
+  assert.match(page, /typeId: item\.market_type_id \|\| item\.type_id/);
+});
+
+check("脑插可兑换套数只按 LP 计算并列出材料缺口", async () => {
+  const [page, route] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts")]);
+  assert.match(page, /filter\(\(\{ count \}\) => count > 0\)/);
+  assert.match(page, /仅按 LP 粗略计算，材料未参与套数限制/);
+  assert.match(page, /implantMaterialRequirements/);
+  assert.match(page, /现有卖单/);
+  assert.match(route, /sell_available_volume/);
+  assert.match(page, /材料可能不足，请检查材料/);
+  assert.match(page, /无收单 · 采用预期价格估算/);
+  assert.match(page, /无收单及预期价 · 采用卖单估算/);
+  assert.match(route, /expected_price/);
+  assert.match(route, /priceSource/);
+  assert.match(page, /material-missing/);
+});
+
+check("脑插目录由全量同步生成且合同按增量明细签名匹配", async () => {
+  const [route, page, catalog, contracts, core] = await Promise.all([
+    source("app/api/data/contracts/route.ts"), source("app/page.tsx"), source("app/api/sync/catalog/route.ts"),
+    source("scripts/contract-sync-daemon.mjs"), source("scripts/contract-sync-core.mjs"),
+  ]);
+  assert.doesNotMatch(route, /INSERT INTO implant_catalog/);
+  assert.match(route, /sort\(\(a, b\) => a - b\)/);
+  assert.match(catalog, /rebuildImplantCatalog/);
+  assert.match(catalog, /DELETE FROM implant_catalog/);
+  assert.match(contracts, /fetchDirectory\(metrics\)/);
+  assert.match(contracts, /contract_item_cache/);
+  assert.match(contracts, /DELETE FROM contract_snapshots/);
+  assert.doesNotMatch(contracts, /contract\.volume >= 6/);
+  assert.match(core, /quantities\.size !== 6/);
+  assert.match(core, /setCounts\.size !== 1/);
+  assert.match(contracts, /unit_price: contract\.price \/ item\.set_count/);
+  assert.match(page, /公开合同价格/);
+  assert.match(page, /implant-item-materials/);
 });

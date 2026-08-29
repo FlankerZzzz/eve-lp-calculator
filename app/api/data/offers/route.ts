@@ -12,11 +12,11 @@ type OfferRow = {
   exchange_signature?: string; manufacturing_signature?: string;
 };
 type HistoryPrices = { 30: number; 15: number; 7: number; 3: number; 1: number };
-type MaterialRow = { corporation_id: number; offer_id: number; type_id: number; quantity: number; item_name: string; buy_price: number; sell_price: number; material_kind: string; historical_prices?: HistoryPrices; sell_execution_price?: number; sell_execution_coverage?: number };
+type MaterialRow = { corporation_id: number; offer_id: number; type_id: number; quantity: number; item_name: string; buy_price: number; sell_price: number; sell_available_volume: number; material_kind: string; historical_prices?: HistoryPrices; sell_execution_price?: number; sell_execution_coverage?: number };
 type OrderLevelRow = { type_id: number; side: "buy" | "sell"; price: number; volume: number };
 type HistoryRow = { type_id: number; trade_date: string; average_price: number; volume: number };
 type DailyVolumePoint = { trade_date: string; volume: number };
-type ImplantSetRow = { type_id: number; name_en: string; name_zh: string | null; buy_price: number; sell_price: number; lp_cost: number; isk_cost: number; material_cost: number };
+type ImplantSetRow = { corporation_id: number; offer_id: number; type_id: number; blueprint_type_id: number; is_blueprint: number; name_en: string; name_zh: string | null; buy_price: number; sell_price: number; expected_price: number; lp_cost: number; isk_cost: number; material_cost: number };
 const finiteNumber = (value: string | null, fallback: number) => value === null || value.trim() === "" ? fallback : Number(value);
 const HISTORY_WINDOWS = [30, 15, 7, 3, 1] as const;
 const emptyHistory = (): HistoryPrices => ({ 30: 0, 15: 0, 7: 0, 3: 0, 1: 0 });
@@ -148,12 +148,16 @@ export async function GET(request: Request) {
       const oWhere = batch.map(() => "(o.corporation_id=? AND o.offer_id=?)").join(" OR ");
       const rows = (await db.prepare(`
       SELECT m.corporation_id, m.offer_id, m.type_id, m.quantity, COALESCE(t.name_zh, t.name_en, '物品 ' || m.type_id) item_name,
-        COALESCE(mo.buy_price, 0) buy_price, COALESCE(mo.sell_price, 0) sell_price, '兑换材料' material_kind
+        COALESCE(mo.buy_price, 0) buy_price, COALESCE(mo.sell_price, 0) sell_price,
+        COALESCE((SELECT SUM(mol.volume) FROM market_order_levels mol WHERE mol.region_id=${MARKET_REGION_ID} AND mol.type_id=m.type_id AND mol.side='sell'), 0) sell_available_volume,
+        '兑换材料' material_kind
       FROM lp_offer_materials m LEFT JOIN item_types t ON t.type_id=m.type_id
       LEFT JOIN market_orders mo ON mo.region_id=? AND mo.type_id=m.type_id WHERE ${mWhere}
       UNION ALL
       SELECT o.corporation_id, o.offer_id, bm.material_type_id, bm.quantity*o.quantity,
-        COALESCE(t.name_zh, t.name_en, '物品 ' || bm.material_type_id), COALESCE(mo.buy_price, 0), COALESCE(mo.sell_price, 0), '制造材料'
+        COALESCE(t.name_zh, t.name_en, '物品 ' || bm.material_type_id), COALESCE(mo.buy_price, 0), COALESCE(mo.sell_price, 0),
+        COALESCE((SELECT SUM(mol.volume) FROM market_order_levels mol WHERE mol.region_id=${MARKET_REGION_ID} AND mol.type_id=bm.material_type_id AND mol.side='sell'), 0),
+        '制造材料'
       FROM lp_offers o JOIN blueprint_materials bm ON bm.blueprint_type_id=o.type_id
       LEFT JOIN item_types t ON t.type_id=bm.material_type_id
       LEFT JOIN market_orders mo ON mo.region_id=? AND mo.type_id=bm.material_type_id WHERE ${oWhere}
@@ -252,24 +256,30 @@ export async function GET(request: Request) {
     const sortColumn = sortColumns[sortKey] || "lp_ratio";
     const offers = (await db.prepare(`SELECT * FROM (${baseSql}) ranked ORDER BY ${sortColumn} ${sortDirection} NULLS LAST, item_name, offer_id LIMIT ? OFFSET ?`).bind(...bindings, pageSize, (page - 1) * pageSize).all<OfferRow>()).results;
     const materials = await loadMaterials(offers);
-    const implantRows = (await db.prepare(`SELECT COALESCE(pt.type_id, t.type_id) type_id, COALESCE(pt.name_en, t.name_en, '') name_en, COALESCE(pt.name_zh, t.name_zh) name_zh, o.lp_cost, o.isk_cost, COALESCE(mo.buy_price, 0) buy_price, COALESCE(mo.sell_price, 0) sell_price, COALESCE((SELECT SUM(m.quantity * COALESCE(mo2.sell_price, 0)) FROM lp_offer_materials m LEFT JOIN market_orders mo2 ON mo2.region_id=? AND mo2.type_id=m.type_id WHERE m.corporation_id=o.corporation_id AND m.offer_id=o.offer_id), 0) + COALESCE((SELECT SUM(bm.quantity * COALESCE(mo3.sell_price, 0)) FROM blueprint_materials bm LEFT JOIN market_orders mo3 ON mo3.region_id=? AND mo3.type_id=bm.material_type_id WHERE bm.blueprint_type_id=br.blueprint_type_id), 0) material_cost FROM lp_offers o JOIN item_types t ON t.type_id=o.type_id LEFT JOIN blueprint_recipes br ON br.blueprint_type_id=o.type_id LEFT JOIN item_types pt ON pt.type_id=br.product_type_id LEFT JOIN market_orders mo ON mo.region_id=? AND mo.type_id=COALESCE(br.product_type_id, t.type_id) WHERE o.corporation_id=? AND (COALESCE(pt.name_en, t.name_en) LIKE '% Alpha' OR COALESCE(pt.name_en, t.name_en) LIKE '% Beta' OR COALESCE(pt.name_en, t.name_en) LIKE '% Gamma' OR COALESCE(pt.name_en, t.name_en) LIKE '% Delta' OR COALESCE(pt.name_en, t.name_en) LIKE '% Epsilon' OR COALESCE(pt.name_en, t.name_en) LIKE '% Omega')`).bind(MARKET_REGION_ID, MARKET_REGION_ID, MARKET_REGION_ID, corporationId).all<ImplantSetRow>()).results;
+    const implantRows = (await db.prepare(`SELECT o.corporation_id, o.offer_id, COALESCE(pt.type_id, t.type_id) type_id, t.type_id blueprint_type_id, CASE WHEN br.blueprint_type_id IS NULL THEN 0 ELSE 1 END is_blueprint, COALESCE(pt.name_en, t.name_en, '') name_en, COALESCE(pt.name_zh, t.name_zh) name_zh, o.lp_cost, o.isk_cost, COALESCE(mo.buy_price, 0) buy_price, COALESCE(mo.sell_price, 0) sell_price, COALESCE((SELECT SUM(md.average_price * md.volume) / NULLIF(SUM(md.volume), 0) FROM market_daily md WHERE md.region_id=? AND md.type_id=COALESCE(pt.type_id, t.type_id) AND md.trade_date>=?), 0) expected_price, COALESCE((SELECT SUM(m.quantity * COALESCE(mo2.sell_price, 0)) FROM lp_offer_materials m LEFT JOIN market_orders mo2 ON mo2.region_id=? AND mo2.type_id=m.type_id WHERE m.corporation_id=o.corporation_id AND m.offer_id=o.offer_id), 0) + COALESCE((SELECT SUM(bm.quantity * COALESCE(mo3.sell_price, 0)) FROM blueprint_materials bm LEFT JOIN market_orders mo3 ON mo3.region_id=? AND mo3.type_id=bm.material_type_id WHERE bm.blueprint_type_id=br.blueprint_type_id), 0) material_cost FROM lp_offers o JOIN item_types t ON t.type_id=o.type_id LEFT JOIN blueprint_recipes br ON br.blueprint_type_id=o.type_id LEFT JOIN item_types pt ON pt.type_id=br.product_type_id LEFT JOIN market_orders mo ON mo.region_id=? AND mo.type_id=COALESCE(br.product_type_id, t.type_id) WHERE o.corporation_id=? AND (COALESCE(pt.name_en, t.name_en) LIKE '% Alpha' OR COALESCE(pt.name_en, t.name_en) LIKE '% Beta' OR COALESCE(pt.name_en, t.name_en) LIKE '% Gamma' OR COALESCE(pt.name_en, t.name_en) LIKE '% Delta' OR COALESCE(pt.name_en, t.name_en) LIKE '% Epsilon' OR COALESCE(pt.name_en, t.name_en) LIKE '% Omega')`).bind(MARKET_REGION_ID, cutoff, MARKET_REGION_ID, MARKET_REGION_ID, MARKET_REGION_ID, corporationId).all<ImplantSetRow>()).results;
+    const implantMaterials = await loadMaterials(implantRows as unknown as OfferRow[]);
     const levels = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Omega"];
     const grouped = new Map<string, Map<string, ImplantSetRow>>();
     for (const row of implantRows) {
       const level = levels.find(value => row.name_en.endsWith(` ${value}`));
       if (!level) continue;
       const family = row.name_en.slice(0, -level.length - 1);
-      const set = grouped.get(family) ?? new Map<string, ImplantSetRow>();
+      const groupKey = `${family}|${row.is_blueprint ? "blueprint" : "direct"}`;
+      const set = grouped.get(groupKey) ?? new Map<string, ImplantSetRow>();
       set.set(level, row);
-      grouped.set(family, set);
+      grouped.set(groupKey, set);
     }
-    const implantSets = [...grouped.entries()].filter(([, set]) => set.size === 6).map(([name, set]) => {
+    const implantSets = [...grouped.entries()].filter(([, set]) => set.size === 6).map(([groupKey, set]) => {
+      const [name, source] = groupKey.split("|");
       const items = levels.map(level => set.get(level)!);
       const chineseName = items[0].name_zh?.replace(/[—-]?(?:阿尔法|贝它|伽玛|德尔塔|伊普西隆|欧米伽)型$/, "").replace(/[—\-\s]+$/, "");
       const totalLp = items.reduce((sum, item) => sum + item.lp_cost, 0);
-      const marketValue = items.every(item => item.buy_price > 0) ? items.reduce((sum, item) => sum + item.buy_price, 0) : null;
-      const netProfit = items.every(item => item.buy_price > 0) ? items.reduce((sum, item) => sum + item.buy_price * 0.97 - item.isk_cost - item.material_cost, 0) : null;
-      return { name: chineseName || name, item_count: 6, total_lp: totalLp, lp_ratio: netProfit !== null && totalLp > 0 ? netProfit / totalLp : null, priced_count: items.filter(item => item.sell_price > 0).length, market_value: marketValue, items: items.map((item, index) => ({ level: levels[index], type_id: item.type_id, name: item.name_zh || item.name_en, lp_cost: item.lp_cost, sell_price: item.sell_price })) };
+      const plausibleBuy = (item: ImplantSetRow) => item.buy_price > 0 && !(item.expected_price > item.buy_price * 10 && item.sell_price > item.buy_price * 10);
+      const valuationPrice = (item: ImplantSetRow) => plausibleBuy(item) ? item.buy_price : item.expected_price > 0 ? item.expected_price : item.sell_price;
+      const priceSource = (item: ImplantSetRow) => plausibleBuy(item) ? "buy" : item.expected_price > 0 ? "expected" : item.sell_price > 0 ? "sell" : "missing";
+      const marketValue = items.every(item => valuationPrice(item) > 0) ? items.reduce((sum, item) => sum + valuationPrice(item), 0) : null;
+      const netProfit = marketValue !== null ? items.reduce((sum, item) => sum + valuationPrice(item) * 0.97 - item.isk_cost - item.material_cost, 0) : null;
+      return { name: chineseName || name, is_blueprint: source === "blueprint", item_count: 6, total_lp: totalLp, lp_ratio: netProfit !== null && totalLp > 0 ? netProfit / totalLp : null, priced_count: items.filter(item => valuationPrice(item) > 0).length, market_value: marketValue, items: items.map((item, index) => ({ level: levels[index], type_id: item.blueprint_type_id, market_type_id: item.type_id, name: item.name_zh || item.name_en, lp_cost: item.lp_cost, buy_price: item.buy_price, expected_price: item.expected_price, sell_price: item.sell_price, valuation_price: valuationPrice(item), price_source: priceSource(item), materials: implantMaterials.get(`${item.corporation_id}:${item.offer_id}`) ?? [] })) };
     });
     return Response.json({ view: "detail", offers: await hydrate(offers, materials), total, page, pageSize: requestedSize === "all" ? "all" : pageSize, pages: requestedSize === "all" ? 1 : Math.max(1, Math.ceil(total / pageSize)), days, historyLatestDate: latestHistoryDate, implant_sets: implantSets });
   }

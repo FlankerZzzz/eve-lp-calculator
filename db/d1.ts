@@ -43,6 +43,14 @@ async function initializeSchema() {
     `CREATE TABLE IF NOT EXISTS sync_jobs (kind TEXT PRIMARY KEY, status TEXT NOT NULL, phase TEXT, run_started_at TEXT, processed INTEGER NOT NULL DEFAULT 0, remaining INTEGER NOT NULL DEFAULT 0, last_endpoint TEXT, last_http_status INTEGER, last_response TEXT, error TEXT, updated_at TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS sync_events (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, phase TEXT, endpoint TEXT, http_status INTEGER, response TEXT, created_at TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS ranking_snapshots (list_kind TEXT NOT NULL, rank INTEGER NOT NULL, snapshot_date TEXT NOT NULL, calculated_at TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY (list_kind, rank))`,
+    `CREATE TABLE IF NOT EXISTS implant_catalog (set_key TEXT NOT NULL, set_name TEXT NOT NULL, is_blueprint INTEGER NOT NULL DEFAULT 0, item_type_ids TEXT NOT NULL, source_flags TEXT NOT NULL DEFAULT 'direct', generation_id TEXT, updated_at TEXT NOT NULL, PRIMARY KEY (set_key))`,
+    `CREATE TABLE IF NOT EXISTS contract_snapshots (set_key TEXT PRIMARY KEY, payload TEXT NOT NULL, fetched_at TEXT NOT NULL, expires_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ready', error_message TEXT)`,
+    `CREATE TABLE IF NOT EXISTS contract_headers (contract_id INTEGER PRIMARY KEY, contract_type TEXT NOT NULL, price REAL NOT NULL, date_issued TEXT NOT NULL, date_expired TEXT NOT NULL, start_location_id INTEGER NOT NULL, end_location_id INTEGER, volume REAL NOT NULL DEFAULT 0, last_seen_generation TEXT NOT NULL, last_seen_at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1)`,
+    `CREATE TABLE IF NOT EXISTS contract_item_cache (contract_id INTEGER PRIMARY KEY, payload TEXT NOT NULL, classifier_version INTEGER NOT NULL, status TEXT NOT NULL, set_signature TEXT, set_count INTEGER, fetched_at TEXT NOT NULL, error_message TEXT)`,
+    `CREATE INDEX IF NOT EXISTS idx_contract_item_signature ON contract_item_cache (set_signature, status)`,
+    `CREATE INDEX IF NOT EXISTS idx_contract_headers_active ON contract_headers (active, contract_type, price)`,
+    `CREATE TABLE IF NOT EXISTS contract_sync_state (id INTEGER PRIMARY KEY CHECK (id=1), status TEXT NOT NULL DEFAULT 'idle', locked_until TEXT, started_at TEXT, finished_at TEXT, last_success_at TEXT, heartbeat_at TEXT, generation_id TEXT, retry_count INTEGER NOT NULL DEFAULT 0, directory_contracts INTEGER NOT NULL DEFAULT 0, candidate_contracts INTEGER NOT NULL DEFAULT 0, cached_contracts INTEGER NOT NULL DEFAULT 0, fetched_contracts INTEGER NOT NULL DEFAULT 0, unavailable_contracts INTEGER NOT NULL DEFAULT 0, matched_contracts INTEGER NOT NULL DEFAULT 0, request_count INTEGER NOT NULL DEFAULT 0, duration_ms INTEGER NOT NULL DEFAULT 0, error_message TEXT)`,
+    `INSERT OR IGNORE INTO contract_sync_state (id, status, retry_count) VALUES (1, 'idle', 0)`,
     `CREATE INDEX IF NOT EXISTS idx_corporations_faction ON corporations (faction_id)`,
     `CREATE INDEX IF NOT EXISTS idx_lp_offers_corporation ON lp_offers (corporation_id)`,
     `CREATE INDEX IF NOT EXISTS idx_lp_offers_type ON lp_offers (type_id)`,
@@ -52,11 +60,32 @@ async function initializeSchema() {
     `CREATE INDEX IF NOT EXISTS idx_market_order_book_type ON market_order_book (slot, type_id, is_buy_order, price)`,
     `CREATE INDEX IF NOT EXISTS idx_market_order_book_location ON market_order_book (slot, location_id, type_id, is_buy_order, price)`,
     `CREATE INDEX IF NOT EXISTS idx_sync_events_created ON sync_events (created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_contract_snapshots_expiry ON contract_snapshots (expires_at)`,
   ];
   await db.batch(statements.map(sql => db.prepare(sql)));
   const corporationColumns = (await db.prepare("PRAGMA table_info(corporations)").all<{ name: string }>()).results;
   if (!corporationColumns.some(column => column.name === "name_synced_at")) {
     await db.prepare("ALTER TABLE corporations ADD COLUMN name_synced_at TEXT").run();
+  }
+  const implantColumns = (await db.prepare("PRAGMA table_info(implant_catalog)").all<{ name: string }>()).results;
+  if (!implantColumns.some(column => column.name === "source_flags")) {
+    await db.prepare("ALTER TABLE implant_catalog ADD COLUMN source_flags TEXT NOT NULL DEFAULT 'direct'").run();
+  }
+  if (!implantColumns.some(column => column.name === "generation_id")) {
+    await db.prepare("ALTER TABLE implant_catalog ADD COLUMN generation_id TEXT").run();
+  }
+  const contractStateColumns = (await db.prepare("PRAGMA table_info(contract_sync_state)").all<{ name: string }>()).results;
+  const contractStateMigrations = [
+    ["heartbeat_at", "TEXT"], ["generation_id", "TEXT"],
+    ["directory_contracts", "INTEGER NOT NULL DEFAULT 0"], ["candidate_contracts", "INTEGER NOT NULL DEFAULT 0"],
+    ["cached_contracts", "INTEGER NOT NULL DEFAULT 0"], ["fetched_contracts", "INTEGER NOT NULL DEFAULT 0"],
+    ["unavailable_contracts", "INTEGER NOT NULL DEFAULT 0"], ["matched_contracts", "INTEGER NOT NULL DEFAULT 0"], ["request_count", "INTEGER NOT NULL DEFAULT 0"],
+    ["duration_ms", "INTEGER NOT NULL DEFAULT 0"],
+  ];
+  for (const [name, definition] of contractStateMigrations) {
+    if (!contractStateColumns.some(column => column.name === name)) {
+      await db.prepare(`ALTER TABLE contract_sync_state ADD COLUMN ${name} ${definition}`).run();
+    }
   }
   schemaReady = true;
   return db;

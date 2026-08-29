@@ -1,4 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
+import { pathToFileURL } from "node:url";
 import { summarize } from "./order-fetch-process.mjs";
 
 const ESI_BASE = (process.env.ESI_BASE_URL || "https://ali-esi.evepc.163.com").replace(/\/$/, "");
@@ -172,43 +173,49 @@ async function syncSnapshot(runStartedAt) {
   console.log(`[order-sync] 全量快照完成：${first.pages} 页，${orderCount} 条订单，吉他 4-4 相关物品 ${grouped.size} 种`);
 }
 
-console.log(`[order-sync] 常驻调度器启动：伏尔戈全量订单，${PAGE_CONCURRENCY} 页并发，双槽原子快照`);
-let failedAttempts = 0;
-let activeRunStartedAt = "";
-while (true) {
-  const job = db.prepare("SELECT status,run_started_at FROM sync_jobs WHERE kind='orders'").get();
-  if (!job || job.status !== "running" || !job.run_started_at) {
-    failedAttempts = 0;
-    activeRunStartedAt = "";
-    await sleep(1000);
-    continue;
-  }
-  if (activeRunStartedAt !== job.run_started_at) {
-    activeRunStartedAt = job.run_started_at;
-    failedAttempts = 0;
-  }
-  try {
-    await syncSnapshot(job.run_started_at);
-    failedAttempts = 0;
-  } catch (error) {
-    const activeSlot = Number(db.prepare("SELECT active_slot FROM market_order_book_state WHERE id=1").get()?.active_slot || 0);
-    db.prepare("DELETE FROM market_order_book WHERE slot=?").run(activeSlot === 0 ? 1 : 0);
-    if (error instanceof PausedError) {
-      console.log(`[order-sync] ${error.message}`);
+export async function runOrderSyncDaemon() {
+  console.log(`[order-sync] 任务模块启动：伏尔戈全量订单，${PAGE_CONCURRENCY} 页并发，双槽原子快照`);
+  let failedAttempts = 0;
+  let activeRunStartedAt = "";
+  while (true) {
+    const job = db.prepare("SELECT status,run_started_at FROM sync_jobs WHERE kind='orders'").get();
+    if (!job || job.status !== "running" || !job.run_started_at) {
+      failedAttempts = 0;
+      activeRunStartedAt = "";
       await sleep(1000);
       continue;
     }
-    failedAttempts += 1;
-    const wait = SNAPSHOT_RETRY_DELAYS[Math.min(failedAttempts - 1, SNAPSHOT_RETRY_DELAYS.length - 1)];
-    const message = error instanceof Error ? error.message : String(error);
-    const now = new Date().toISOString();
-    db.prepare("UPDATE sync_jobs SET status='running',phase='失败重试',last_response=?,error=?,updated_at=? WHERE kind='orders' AND status='running' AND run_started_at=?").run(
-      JSON.stringify({ message: "保留上一份完整快照并自动重试", attempt: failedAttempts, retryAfterSeconds: wait / 1000 }),
-      message,
-      now,
-      job.run_started_at,
-    );
-    console.error(`[order-sync] ${message}；${wait / 1000} 秒后重试（${failedAttempts}）`);
-    await sleep(wait);
+    if (activeRunStartedAt !== job.run_started_at) {
+      activeRunStartedAt = job.run_started_at;
+      failedAttempts = 0;
+    }
+    try {
+      await syncSnapshot(job.run_started_at);
+      failedAttempts = 0;
+    } catch (error) {
+      const activeSlot = Number(db.prepare("SELECT active_slot FROM market_order_book_state WHERE id=1").get()?.active_slot || 0);
+      db.prepare("DELETE FROM market_order_book WHERE slot=?").run(activeSlot === 0 ? 1 : 0);
+      if (error instanceof PausedError) {
+        console.log(`[order-sync] ${error.message}`);
+        await sleep(1000);
+        continue;
+      }
+      failedAttempts += 1;
+      const wait = SNAPSHOT_RETRY_DELAYS[Math.min(failedAttempts - 1, SNAPSHOT_RETRY_DELAYS.length - 1)];
+      const message = error instanceof Error ? error.message : String(error);
+      const now = new Date().toISOString();
+      db.prepare("UPDATE sync_jobs SET status='running',phase='失败重试',last_response=?,error=?,updated_at=? WHERE kind='orders' AND status='running' AND run_started_at=?").run(
+        JSON.stringify({ message: "保留上一份完整快照并自动重试", attempt: failedAttempts, retryAfterSeconds: wait / 1000 }),
+        message,
+        now,
+        job.run_started_at,
+      );
+      console.error(`[order-sync] ${message}；${wait / 1000} 秒后重试（${failedAttempts}）`);
+      await sleep(wait);
+    }
   }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  void runOrderSyncDaemon();
 }

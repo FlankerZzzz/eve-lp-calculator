@@ -19,24 +19,18 @@ const devEnv = { ...process.env, SQLITE_RUNTIME: process.env.SQLITE_RUNTIME || "
 mkdirSync(path.dirname(sqlitePath), { recursive: true });
 
 const web = spawn(process.execPath, [vinext, "dev", ...args], { stdio: "inherit", env: devEnv });
-const worker = spawn(process.execPath, [path.resolve("scripts", "sync-worker.mjs")], {
+const sync = spawn(process.execPath, [path.resolve("scripts", "sync-daemon.mjs")], {
   stdio: "inherit",
   env: { ...devEnv, SYNC_BASE_URL: process.env.SYNC_BASE_URL || `http://${workerHostname}:${port}` },
-});
-const orderWorker = spawn(process.execPath, [path.resolve("scripts", "order-sync-daemon.mjs")], {
-  stdio: "inherit",
-  env: devEnv,
 });
 
 function shutdown(code = 0) {
   if (!web.killed) web.kill();
-  if (!worker.killed) worker.kill();
-  if (!orderWorker.killed) orderWorker.kill();
+  if (!sync.killed) sync.kill();
   process.exit(code);
 }
 
 web.on("exit", code => shutdown(code ?? 0));
-worker.on("exit", code => { if (code) shutdown(code); });
-orderWorker.on("exit", code => { if (code) shutdown(code); });
+sync.on("exit", code => { if (code) shutdown(code); });
 process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
