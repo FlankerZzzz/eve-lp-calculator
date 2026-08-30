@@ -32,7 +32,7 @@ check("兑换方案物品信息不显示由 LP 输入推算的可兑换次数", 
 check("订单深度不足时保留利润估算并显示材料与收单风险", async () => {
   const page = await source("app/page.tsx");
   assert.match(page, /const maxProfit = offer\.sell_price > 0 \?/);
-  assert.match(page, /const minProfit = immediateBuyPrice > 0 \?/);
+  assert.match(page, /const minProfit = hasBuyOrder \?/);
   assert.match(page, /coverage-shortage/);
   assert.doesNotMatch(page, /风险估算/);
   assert.match(page, /收单不足/);
@@ -145,10 +145,32 @@ check("组合计算的全量材料查询按小批次执行", async () => {
   assert.match(route, /pageSize = requestedSize === "all"/);
 });
 
+check("企业详情使用真实收单并在全量结果排序后分页", async () => {
+  const [page, route] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts")]);
+  assert.match(page, /params\.set\("page_size", "all"\)/);
+  assert.match(page, /const hasBuyOrder = rawBuyPrice > 0/);
+  assert.match(page, /const immediateBuyPrice = hasBuyOrder \? rawBuyPrice : 0/);
+  assert.doesNotMatch(page, /expectedOutputPrice > rawBuyPrice \* 10/);
+  assert.match(page, /sortCalculatedOffers\(detailCalculated/);
+  assert.doesNotMatch(page, /sourcePriority/);
+  assert.match(page, /filteredDetails\.slice\(\(safeDetailPage - 1\) \* detailPageSize/);
+  assert.match(page, /rankingTable\("企业兑换详情"[^\n]*visibleDetails/);
+  assert.match(page, /无估值或异常估值/);
+  assert.match(page, /请自行评估价值/);
+  assert.doesNotMatch(page, /采用卖单估算/);
+  assert.match(page, /const lpRatio = hasBuyOrder && offer\.lp_cost > 0 && minProfit !== null \? minProfit \/ offer\.lp_cost : 0/);
+  assert.match(page, /offer\.outputPriceSource !== "buy"/);
+  assert.match(page, /offer\.lpRatio === 0/);
+  assert.match(page, /LP 成本为 0 · 比例不可计算/);
+  assert.match(page, /历史估值仅供参考 · 按 0 计算/);
+  assert.match(route, /item\.buy_price > 0 \? item\.buy_price : item\.expected_price/);
+  assert.doesNotMatch(route, /item\.expected_price > 0 \? item\.expected_price : item\.sell_price/);
+});
+
 check("组合计算按材料和产出数量逐档成交，并显示保守利润和 LP 比例", async () => {
   const page = await source("app/page.tsx");
   assert.match(page, /material\.sell_execution_price \|\| material\.sell_price/);
-  assert.match(page, /immediateBuyPrice > 0/);
+  assert.match(page, /hasBuyOrder && offer\.lp_cost > 0/);
   assert.match(page, /lpRatio = usedLp > 0 \? totalProfit \/ usedLp : 0/);
   assert.match(page, /总体 LP 比例/);
   assert.match(page, /税后净利润 ÷ 已使用 LP/);
@@ -273,8 +295,8 @@ check("脑插可兑换套数只按 LP 计算并列出材料缺口", async () => 
   assert.match(page, /现有卖单/);
   assert.match(route, /sell_available_volume/);
   assert.match(page, /材料可能不足，请检查材料/);
-  assert.match(page, /无收单 · 采用预期价格估算/);
-  assert.match(page, /无收单及预期价 · 采用卖单估算/);
+  assert.match(page, /无收单 · 采用历史估值/);
+  assert.match(page, /无收单及历史估值 · 请自行评估价值/);
   assert.match(route, /expected_price/);
   assert.match(route, /priceSource/);
   assert.match(page, /material-missing/);

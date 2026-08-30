@@ -1,6 +1,6 @@
 "use client";
 
-import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type Dispatch, type ReactNode, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type SortKey = "lp_cost" | "isk_cost" | "materialCost" | "sell_price" | "buy_price" | "maxProfit" | "minProfit" | "lpRatio" | "volume";
 type SortDirection = "asc" | "desc";
@@ -154,8 +154,6 @@ export default function Home() {
   const [popularOffers, setPopularOffers] = useState<StoredOffer[]>([]);
   const [highRatioOffers, setHighRatioOffers] = useState<StoredOffer[]>([]);
   const [detailOffers, setDetailOffers] = useState<StoredOffer[]>([]);
-  const [detailTotal, setDetailTotal] = useState(0);
-  const [detailPages, setDetailPages] = useState(1);
   const [implantSets, setImplantSets] = useState<ImplantSet[]>([]);
   const [expandedImplantSets, setExpandedImplantSets] = useState<Set<string>>(new Set());
   const [implantContracts, setImplantContracts] = useState<Record<string, { loading: boolean; contracts: ContractMatch[]; error?: string }>>({});
@@ -168,6 +166,7 @@ export default function Home() {
   const [ratioPage, setRatioPage] = useState(1);
   const [rankingPageSize, setRankingPageSize] = useState("10");
   const [showBoosterBlueprints, setShowBoosterBlueprints] = useState(false);
+  const [showUnvaluedOnly, setShowUnvaluedOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("正在读取本地数据库…");
   const [databaseState, setDatabaseState] = useState<"CHECKING" | "ONLINE" | "OFFLINE">("CHECKING");
@@ -237,20 +236,17 @@ export default function Home() {
       if (corporationId) {
         params.set("corporation_id", String(corporationId));
         params.set("view", "detail");
-        params.set("page", String(page));
-        params.set("page_size", pageSize);
-        params.set("sort_key", sortKey);
-        params.set("sort_direction", sortDirection);
+        // 企业详情必须先取得完整结果，才能按逐档成交价和价格回退规则
+        // 计算全局排序；服务端按原始价格分页会造成每页各自排序。
+        params.set("page_size", "all");
       }
       const response = await fetch(`/api/data/offers?${params}`, { cache: "no-store" });
       if (!response.ok) throw new Error("无法读取兑换数据");
       if (corporationId) {
         const data = await response.json() as { offers: StoredOffer[]; total: number; pages: number; implant_sets?: ImplantSet[] };
         setDetailOffers(data.offers);
-        setDetailTotal(data.total);
-        setDetailPages(data.pages);
         setImplantSets(data.implant_sets || []);
-        setStatus(`企业详情：第 ${page} 页，共 ${data.total.toLocaleString()} 条兑换方案`);
+        setStatus(`企业详情：已载入全部 ${data.total.toLocaleString()} 条兑换方案`);
       } else {
         const data = await response.json() as { popular: StoredOffer[]; highRatio: StoredOffer[]; calculatedAt?: string | null };
         setPopularOffers(data.popular);
@@ -266,7 +262,7 @@ export default function Home() {
       setDetailOffers([]);
       setImplantSets([]);
     } finally { setLoading(false); }
-  }, [corporationId, factionId, page, pageSize, showBoosterBlueprints, sortDirection, sortKey, tax, windowDays]);
+  }, [corporationId, factionId, showBoosterBlueprints, tax, windowDays]);
 
   useEffect(() => { loadOptions().catch(error => { setDatabaseState("OFFLINE"); setStatus(error instanceof Error ? error.message : "读取数据库失败"); }); }, [loadOptions]);
   useEffect(() => { loadOffers(); }, [loadOffers]);
@@ -344,13 +340,16 @@ export default function Home() {
     const materialsCovered = calculatedMaterials.every(material => material.quantity <= 0 || (material.sell_execution_coverage ?? (material.sell_price > 0 ? 1 : 0)) >= 1);
     const outputCovered = (offer.buy_execution_coverage ?? (offer.buy_price > 0 ? 1 : 0)) >= 1;
     const maxProfit = offer.sell_price > 0 ? offer.sell_price * revenueQuantity * (1 - tax / 100) - offer.isk_cost - materialCost : null;
-    const expectedOutputPrice = unitPrice > 0 ? unitPrice : offer.sell_price;
     const rawBuyPrice = offer.buy_execution_price || offer.buy_price;
-    const plausibleBuy = rawBuyPrice > 0 && !(expectedOutputPrice > rawBuyPrice * 10 && offer.sell_price > rawBuyPrice * 10);
-    const immediateBuyPrice = plausibleBuy ? rawBuyPrice : expectedOutputPrice;
-    const outputPriceSource: CalculatedOffer["outputPriceSource"] = plausibleBuy ? "buy" : unitPrice > 0 ? "expected" : offer.sell_price > 0 ? "sell" : "missing";
-    const minProfit = immediateBuyPrice > 0 ? immediateBuyPrice * revenueQuantity * (1 - tax / 100) - offer.isk_cost - materialCost : null;
-    const lpRatio = offer.lp_cost > 0 && minProfit !== null ? minProfit / offer.lp_cost : 0;
+    // 当前订单快照存在收单时必须信任真实收单。价格差距很大并不代表
+    // 订单错误；旧启发式会把真实低价收单误替换成卖单。
+    const hasBuyOrder = rawBuyPrice > 0;
+    // 历史价格只用于参考。没有真实收单时，当前可成交价值按 0 处理，
+    // 避免历史估值进入 LP 比例、排序或最优组合计算。
+    const immediateBuyPrice = hasBuyOrder ? rawBuyPrice : 0;
+    const outputPriceSource: CalculatedOffer["outputPriceSource"] = hasBuyOrder ? "buy" : unitPrice > 0 ? "expected" : "missing";
+    const minProfit = hasBuyOrder ? immediateBuyPrice * revenueQuantity * (1 - tax / 100) - offer.isk_cost - materialCost : null;
+    const lpRatio = hasBuyOrder && offer.lp_cost > 0 && minProfit !== null ? minProfit / offer.lp_cost : 0;
     const historyProfit = unitPrice > 0 && calculatedMaterials.every(material => material.quantity <= 0 || material.historyUnitPrice > 0) ? netRevenue - offer.isk_cost - historyMaterialCost : null;
     const historyLpRatio = offer.lp_cost > 0 && historyProfit !== null ? historyProfit / offer.lp_cost : null;
     const historyDeviation = historyLpRatio !== null && historyLpRatio !== 0 ? (lpRatio - historyLpRatio) / Math.abs(historyLpRatio) * 100 : null;
@@ -434,6 +433,13 @@ export default function Home() {
   const ratioPageCount = Math.max(1, Math.ceil(sortedRatio.length / rankingSize));
   const visiblePopular = useMemo(() => sortedPopular.slice((popularPage - 1) * rankingSize, popularPage * rankingSize), [popularPage, rankingSize, sortedPopular]);
   const visibleRatio = useMemo(() => sortedRatio.slice((ratioPage - 1) * rankingSize, ratioPage * rankingSize), [ratioPage, rankingSize, sortedRatio]);
+  const unvaluedDetailCount = useMemo(() => sortedDetails.filter(offer => offer.outputPriceSource !== "buy").length, [sortedDetails]);
+  const filteredDetails = useMemo(() => showUnvaluedOnly ? sortedDetails.filter(offer => offer.outputPriceSource !== "buy") : sortedDetails, [showUnvaluedOnly, sortedDetails]);
+  const detailPageSize = pageSize === "all" ? Math.max(1, filteredDetails.length) : Number(pageSize);
+  const detailPages = Math.max(1, Math.ceil(filteredDetails.length / detailPageSize));
+  const safeDetailPage = Math.min(page, detailPages);
+  const visibleDetails = useMemo(() => pageSize === "all" ? filteredDetails : filteredDetails.slice((safeDetailPage - 1) * detailPageSize, safeDetailPage * detailPageSize), [detailPageSize, filteredDetails, pageSize, safeDetailPage]);
+  useEffect(() => { if (page > detailPages) setPage(detailPages); }, [detailPages, page]);
 
   function toggleSort(key: SortKey) {
     if (corporationId) setPage(1);
@@ -459,10 +465,11 @@ export default function Home() {
     return next;
   });
   const historyWindowLabel = historyWindow === 1 ? "最近交易" : `${historyWindow}天`;
-  const outputCoverageWarning = (offer: CalculatedOffer) => offer.outputPriceSource === "expected" ? "无收单 · 采用预期价格估算" : offer.outputPriceSource === "sell" ? "无收单及预期价 · 采用卖单估算" : "收单不足";
+  const outputCoverageWarning = (offer: CalculatedOffer) => offer.outputPriceSource === "expected" ? "无收单 · 历史估值仅供参考 · 按 0 计算" : offer.outputPriceSource === "missing" ? "无收单及历史估值 · 按 0 计算" : "收单不足";
+  const outputPriceLabel = (offer: CalculatedOffer) => offer.outputPriceSource === "buy" ? "收单价" : "收单价格（按 0）";
 
-  const rankingTable = (title: string, subtitle: string, rows: CalculatedOffer[], sort: TableSort, onSort: (key: SortKey) => void) => <div className="table">
-    <div className="section-head ranking-head"><div><p className="eyebrow">{subtitle}</p><h2>{title}</h2></div></div>
+  const rankingTable = (title: string, subtitle: string, rows: CalculatedOffer[], sort: TableSort, onSort: (key: SortKey) => void, headerAction?: ReactNode) => <div className="table">
+    <div className="section-head ranking-head"><div><p className="eyebrow">{subtitle}</p><h2>{title}</h2></div>{headerAction}</div>
     <div className="table-scroll">
       <div className="mobile-sort" aria-label={`${title}排序`}><span>排序</span><button onClick={() => onSort("lpRatio")}>LP 比例{sortArrow("lpRatio", sort)}</button><button onClick={() => onSort("minProfit")}>最小利润{sortArrow("minProfit", sort)}</button><button onClick={() => onSort("volume")}>日均量{sortArrow("volume", sort)}</button></div>
       <div className="offer-grid thead"><span>物品</span><span>数量</span><span>成本</span><span>价格</span><span>利润</span><button className="sort-button" onClick={() => onSort("volume")}>30天日均交易量{sortArrow("volume", sort)}</button><button className="sort-button" onClick={() => onSort("lpRatio")}>比例{sortArrow("lpRatio", sort)}</button></div>
@@ -472,23 +479,24 @@ export default function Home() {
         const expanded = expandedOffers.has(key);
         const marketTypeId = offer.product_type_id || offer.type_id;
         const marketName = offer.product_name || offer.item_name;
-        const hasCoverageShortage = !offer.materialsCovered || !offer.outputCovered;
+        const hasOutputRisk = offer.outputPriceSource !== "buy" || !offer.outputCovered || offer.lpRatio === 0;
+        const hasCoverageShortage = !offer.materialsCovered || hasOutputRisk;
         return <div className={`offer-group ${hasCoverageShortage ? "coverage-shortage" : ""}`} key={`${title}:${key}`}>
           <article className="mobile-offer-card">
             <header><div className="mobile-offer-name"><ItemIcon typeId={offer.type_id} name={offer.item_name} /><div><strong>{offer.item_name}</strong><small className="offer-affiliation"><span>{offer.faction_name || "未知势力"}</span><span>{offer.corporation_name}</span></small></div></div><button className="market-order-link" onClick={event => openMarket({ typeId: marketTypeId, name: marketName }, event.currentTarget)}>市场订单</button></header>
-            <div className="mobile-key-metrics"><div><small>最小利润</small><strong className={offer.minProfit === null ? "profit-missing" : offer.minProfit >= 0 ? "profit-positive" : "profit-negative"}>{offer.minProfit === null ? "—" : `${formatNumber(offer.minProfit)} ISK`}</strong><em>{offer.minProfit === null ? "暂无收单" : `${magnitudeHint(offer.minProfit)} ISK`}</em>{(!offer.materialsCovered || !offer.outputCovered) && <i className="coverage-alert">{!offer.materialsCovered ? "材料不足" : outputCoverageWarning(offer)}</i>}</div><div><small>LP 比例</small><strong className="yield">{formatNumber(offer.lpRatio)}<em>ISK/LP</em></strong></div></div>
+            <div className="mobile-key-metrics"><div><small>最小利润</small><strong className={offer.minProfit === null ? "profit-missing" : offer.minProfit >= 0 ? "profit-positive" : "profit-negative"}>{offer.minProfit === null ? "—" : `${formatNumber(offer.minProfit)} ISK`}</strong><em>{offer.minProfit === null ? "暂无收单" : `${magnitudeHint(offer.minProfit)} ISK`}</em>{(!offer.materialsCovered || !offer.outputCovered) && <i className="coverage-alert">{!offer.materialsCovered ? "材料不足" : outputCoverageWarning(offer)}</i>}</div><div><small>LP 比例</small><strong className="yield">{formatNumber(offer.lpRatio)}<em>ISK/LP</em></strong>{offer.lpRatio === 0 && <i className="coverage-alert">{offer.lp_cost <= 0 ? "LP 成本为 0 · 比例不可计算" : "无估值 · 请自行评估价值"}</i>}</div></div>
             <div className="history-comparison mobile"><span>{historyWindow === 1 ? "最近交易日" : `${historyWindow} 日`}历史收益</span><b>{offer.historyProfit === null ? "历史价格不完整" : `${formatNumber(offer.historyProfit)} ISK · ${formatNumber(offer.historyLpRatio || 0)} ISK/LP`}</b>{offer.historyDeviation !== null && <i className={offer.historyDeviation >= 0 ? "up" : "down"}>即时收益 {offer.historyDeviation >= 0 ? "高于" : "低于"}（指示价格） {formatNumber(Math.abs(offer.historyDeviation), 1)}%</i>}</div>
             <div className="mobile-quick-facts"><span>LP 成本 <b>{formatNumber(offer.lp_cost)}</b></span><span>30天日均量 <b>{formatNumber(offer.volume, 2)}</b></span></div>
-            <details className="mobile-offer-details"><summary>查看全部价格与成本</summary><dl><div><dt>数量</dt><dd>{formatNumber(offer.quantity)}</dd></div><div><dt>ISK 成本</dt><dd>{formatNumber(offer.isk_cost)}</dd></div><div><dt>材料成本（逐档买入）</dt><dd>{formatNumber(offer.materialCost)}</dd></div><div><dt>当前卖单</dt><dd>{offer.sell_price > 0 ? formatNumber(offer.sell_price) : "—"}</dd></div><div><dt>收单成交均价</dt><dd>{offer.outputPrice > 0 ? formatNumber(offer.outputPrice) : "—"}</dd></div><div><dt>最大利润</dt><dd>{offer.maxProfit === null ? "—" : formatNumber(offer.maxProfit)}</dd></div></dl></details>
+            <details className="mobile-offer-details"><summary>查看全部价格与成本</summary><dl><div><dt>数量</dt><dd>{formatNumber(offer.quantity)}</dd></div><div><dt>ISK 成本</dt><dd>{formatNumber(offer.isk_cost)}</dd></div><div><dt>材料成本（逐档买入）</dt><dd>{formatNumber(offer.materialCost)}</dd></div><div><dt>卖单价</dt><dd>{offer.sell_price > 0 ? formatNumber(offer.sell_price) : "—"}</dd></div><div><dt>{outputPriceLabel(offer)}</dt><dd>{formatNumber(offer.outputPrice)}</dd></div><div><dt>最大利润</dt><dd>{offer.maxProfit === null ? "—" : formatNumber(offer.maxProfit)}</dd></div></dl></details>
             <button className="mobile-material-toggle" onClick={() => toggleMaterials(key)} aria-expanded={expanded}>{offer.materials.length ? (expanded ? "收起材料明细" : `查看材料明细（${offer.materials.length}）`) : "无需额外材料"}</button>
           </article>
           <div className={`offer-grid row ${isBest ? "winner" : ""}`}>
             <div className="item"><button className="expand-mark" onClick={() => toggleMaterials(key)} aria-expanded={expanded} aria-label={`${expanded ? "收起" : "展开"}${offer.item_name}材料`}>{offer.materials.length ? (expanded ? "−" : "+") : "·"}</button><ItemIcon typeId={offer.type_id} name={offer.item_name} /><div><strong>{offer.item_name}</strong><small className="offer-affiliation"><span>{offer.faction_name || "未知势力"}</span><span>{offer.corporation_name}</span></small><button className="market-order-link" onClick={event => openMarket({ typeId: marketTypeId, name: marketName }, event.currentTarget)}>市场订单</button></div>{isBest && <mark>最佳</mark>}</div>
             <span>{formatNumber(offer.revenue_quantity || offer.quantity)}</span>
             <div className="metric-stack cost-stack"><span><small>LP成本</small><b>{formatNumber(offer.lp_cost)}</b></span><span><small>ISK成本</small><b>{formatNumber(offer.isk_cost)}</b></span><span><small>材料成本</small><b>{formatNumber(offer.materialCost)}</b></span></div>
-            <div className="metric-stack price-stack"><span><small>卖单价格（最高）</small><b>{offer.sell_price > 0 ? formatNumber(offer.sell_price) : "—"}</b></span><span className="indicator"><small>指示价格 · {historyWindowLabel}</small><b>{offer.unitPrice > 0 ? formatNumber(offer.unitPrice) : "—"}</b></span><span><small>收单价格（最低）</small><b>{offer.outputPrice > 0 ? formatNumber(offer.outputPrice) : "—"}</b></span></div>
+            <div className="metric-stack price-stack"><span><small>卖单价</small><b>{offer.sell_price > 0 ? formatNumber(offer.sell_price) : "—"}</b></span><span className="indicator"><small>指示价格 · {historyWindowLabel}</small><b>{offer.unitPrice > 0 ? formatNumber(offer.unitPrice) : "—"}</b></span><span><small>{outputPriceLabel(offer)}</small><b>{formatNumber(offer.outputPrice)}</b></span></div>
             <div className="metric-stack profit-stack"><span><small>最大利润</small><b className={offer.maxProfit === null ? "profit-missing" : offer.maxProfit >= 0 ? "profit-positive" : "profit-negative"}>{offer.maxProfit === null ? "—" : formatNumber(offer.maxProfit)}</b>{!offer.materialsCovered && <i className="coverage-alert">材料不足</i>}</span><span className="indicator"><small>指示价格利润</small><b className={offer.historyProfit === null ? "profit-missing" : offer.historyProfit >= 0 ? "profit-positive" : "profit-negative"}>{offer.historyProfit === null ? "—" : formatNumber(offer.historyProfit)}</b></span><span><small>最小利润</small><b className={offer.minProfit === null ? "profit-missing" : offer.minProfit >= 0 ? "profit-positive" : "profit-negative"}>{offer.minProfit === null ? "—" : formatNumber(offer.minProfit)}</b>{(!offer.materialsCovered || !offer.outputCovered) && <i className="coverage-alert">{!offer.materialsCovered ? "材料不足" : outputCoverageWarning(offer)}</i>}</span></div>
-            <span className="volume-value">{formatNumber(offer.volume, 2)}</span><strong className="yield">{formatNumber(offer.lpRatio)}<small>ISK/LP</small></strong>
+            <span className="volume-value">{formatNumber(offer.volume, 2)}</span><strong className="yield">{formatNumber(offer.lpRatio)}<small>ISK/LP</small>{offer.lpRatio === 0 && <i className="coverage-alert">{offer.lp_cost <= 0 ? "LP成本为0" : "请自行估值"}</i>}</strong>
           </div>
           {expanded && <div className="material-panel"><div className="material-head"><span>材料类型</span><span>物品</span><span>数量</span><span>逐档成交均价</span><span>成本</span><span>订单</span></div>{offer.calculatedMaterials.length ? offer.calculatedMaterials.map(material => { const sellCoverage = material.sell_execution_coverage ?? (material.sell_price > 0 ? 1 : 0); return <div className={`material-row ${sellCoverage < 1 ? "order-shortage" : ""}`} key={`${key}:${material.material_kind || "材料"}:${material.type_id}`}><span>{material.material_kind || "兑换材料"}</span><strong className="icon-label"><ItemIcon typeId={material.type_id} name={material.item_name} />{material.item_name}{sellCoverage < 1 && <small className="material-warning">卖单不足 · 请核对实际订单情况，避免无法兑换</small>}</strong><span>{formatNumber(material.quantity)}</span><span>{formatNumber(material.unitPrice)} ISK <small>· 可满足 {formatNumber(sellCoverage * 100, 1)}%</small></span><span>{formatNumber(material.cost)} ISK</span><button className="market-order-button" onClick={event => openMarket({ typeId: material.type_id, name: material.item_name }, event.currentTarget)}>市场订单</button></div>}) : <div className="no-materials">该兑换方案不需要额外材料</div>}</div>}
         </div>;
@@ -496,7 +504,8 @@ export default function Home() {
     </div>
   </div>;
 
-  const detailTable = rankingTable("企业兑换详情", `共 ${detailTotal.toLocaleString()} 条 · 当前第 ${page} / ${detailPages} 页`, sortedDetails, { key: sortKey, direction: sortDirection }, toggleSort);
+  const unvaluedFilter = <div className={`unvalued-filter${showUnvaluedOnly ? " active" : ""}`}><span>请自行评估价值</span><button type="button" aria-pressed={showUnvaluedOnly} onClick={() => { setShowUnvaluedOnly(value => !value); setPage(1); }}>无估值或异常估值（{unvaluedDetailCount}）</button></div>;
+  const detailTable = rankingTable("企业兑换详情", `${showUnvaluedOnly ? "无估值或异常估值" : `共 ${sortedDetails.length.toLocaleString()} 条`} · 当前第 ${safeDetailPage} / ${detailPages} 页`, visibleDetails, { key: sortKey, direction: sortDirection }, toggleSort, unvaluedFilter);
   const rankingPager = (label: string, currentPage: number, pageCount: number, setCurrentPage: Dispatch<SetStateAction<number>>) => <div className="ranking-pagination"><span>{label} · 第 {currentPage} / {pageCount} 页</span><select aria-label={`${label}每页数量`} value={rankingPageSize} onChange={event => { setRankingPageSize(event.target.value); setPopularPage(1); setRatioPage(1); }}><option value="10">每页 10 条</option><option value="20">每页 20 条</option><option value="50">每页 50 条</option><option value="100">每页 100 条</option></select><button type="button" disabled={currentPage <= 1} onClick={() => setCurrentPage(value => Math.max(1, value - 1))}>上一页</button><button type="button" disabled={currentPage >= pageCount} onClick={() => setCurrentPage(value => Math.min(pageCount, value + 1))}>下一页</button></div>;
   const boosterBlueprintToggle = <div className={`booster-blueprint-filter${showBoosterBlueprints ? " active" : ""}`}><span>{showBoosterBlueprints ? "当前包含增效剂蓝图" : "已过滤增效剂蓝图"}</span><button type="button" aria-pressed={showBoosterBlueprints} onClick={() => { setShowBoosterBlueprints(value => !value); setPage(1); setPopularPage(1); setRatioPage(1); }}>{showBoosterBlueprints ? "隐藏增效剂蓝图" : "显示增效剂蓝图"}</button></div>;
   const historySelector = <div className="history-selector" aria-label="历史价格对比周期"><span>历史价对比</span>{([30, 15, 7, 1] as HistoryWindow[]).map(value => { const recentDateHint = value === 1 ? (latestPublishedTradeDate ? `最近交易日：${chineseTradeDate(latestPublishedTradeDate)}` : "最近交易日：等待历史数据") : undefined; return <button type="button" className={historyWindow === value ? "active" : ""} aria-pressed={historyWindow === value} aria-label={recentDateHint} title={recentDateHint} key={value} onClick={() => setHistoryWindow(value)}>{value === 1 ? "最近交易日" : `${value} 日`}</button>})}</div>;
@@ -551,7 +560,7 @@ export default function Home() {
             const itemExpanded = expandedImplantItems.has(itemKey);
             const materialShortages = (item.materials ?? []).filter(material => (material.sell_available_volume ?? 0) < material.quantity);
             const itemRisk = materialShortages.length > 0 || item.price_source !== "buy";
-            const priceHint = item.price_source === "expected" ? "无收单 · 采用预期价格估算" : item.price_source === "sell" ? "无收单及预期价 · 采用卖单估算" : item.price_source === "missing" ? "无收单、预期价及卖单" : "";
+            const priceHint = item.price_source === "expected" ? "无收单 · 采用历史估值" : item.price_source === "sell" || item.price_source === "missing" ? "无收单及历史估值 · 请自行评估价值" : "";
             return <div className={itemRisk ? "implant-item-risk" : ""} key={item.level}><i>{index + 1}</i><ItemIcon typeId={item.type_id} name={item.name} /><span>{item.name}{materialShortages.length > 0 && <small className="material-warning">材料不足</small>}{priceHint && <small className="material-warning">{priceHint}</small>}</span><b>{item.valuation_price > 0 ? `${formatNumber(item.valuation_price)} ISK` : "无可用价格"}</b><em>{formatNumber(item.lp_cost)} LP</em><button className="market-order-link" onClick={event => openMarket({ typeId: item.market_type_id || item.type_id, name: item.name }, event.currentTarget)}>市场订单</button><button type="button" className="market-order-link material-toggle" aria-expanded={itemExpanded} onClick={() => setExpandedImplantItems(value => { const next = new Set(value); next.has(itemKey) ? next.delete(itemKey) : next.add(itemKey); return next; })}>材料</button>{itemExpanded && <div className="implant-item-materials">{item.materials?.length ? item.materials.map(material => { const available = material.sell_available_volume ?? 0; const missing = Math.max(0, material.quantity - available); return <span className={missing > 0 ? "material-missing" : ""} key={material.type_id}>{material.item_name}：需要 {formatNumber(material.quantity)}，现有卖单 {formatNumber(available)}{missing > 0 ? `，缺少 ${formatNumber(missing)}` : "，充足"}</span>; }) : <span>该脑插不需要额外材料</span>}</div>}</div>;
           })}</div>
           <div className="implant-total"><div><span>套装市场卖价</span><strong>{setSellTotal > 0 ? `${formatNumber(setSellTotal)} ISK` : "价格未齐全"}<small>{setSellTotal > 0 ? `约 ${magnitudeHint(setSellTotal)} ISK` : "暂无卖单"}</small></strong></div><div><span>套装市场收单价</span><strong>{setBuyTotal > 0 ? `${formatNumber(setBuyTotal)} ISK` : "价格未齐全"}<small>{setBuyTotal > 0 ? `约 ${magnitudeHint(setBuyTotal)} ISK` : "暂无收单"}</small></strong></div><div className="implant-total-lp"><span>总计 LP</span><strong>{formatNumber(set.total_lp)} LP<small>约 {magnitudeHint(set.total_lp)} LP</small></strong></div><div className="implant-total-ratio"><span>LP 比例</span><strong>{set.lp_ratio === null ? "—" : `${formatNumber(set.lp_ratio)} ISK/LP`}<small>{set.lp_ratio === null ? "价格未齐全" : "按扣除税费和成本后的净利润计算"}</small></strong></div></div>
@@ -590,7 +599,7 @@ export default function Home() {
     <div className="history-toolbar"><span>市场基准价</span>{historySelector}<small>即时收益按订单深度成交；历史收益按所选周期成交均价估算</small></div>
 
     <section className="results"><div className="section-head"><div>{corporationId > 0 && <p className="eyebrow">企业详情</p>}<h2>{corporationId ? "全部兑换方案" : "精选兑换方案"}</h2><p className="sub">{corporationId ? "具体企业使用数据库分页查询 · " : ""}基于伏尔戈市场 {windowDays} 天历史交易数据</p></div><div className="filters"><input aria-label="搜索物品" placeholder="⌕  搜索当前结果" value={query} onChange={event => setQuery(event.target.value)} /><div className="corporation-picker"><button className="picker-trigger" type="button" aria-expanded={corporationPickerOpen} onClick={() => { const opening = !corporationPickerOpen; setCorporationPickerOpen(opening); if (opening && !pickerFactionId) setPickerFactionId(factionId || corporationGroups[0]?.faction_id || 0); }}><span>{selectedFaction?.name || "全部势力"} <b>/</b> {selectedCorporation?.name || "全部企业"}</span><i>{corporationPickerOpen ? "⌃" : "⌄"}</i></button>{corporationPickerOpen && <div className="picker-menu"><div className="picker-search"><input aria-label="搜索企业" autoFocus placeholder="输入企业中文或英文名" value={corporationSearchInput} onChange={event => setCorporationSearchInput(event.target.value)} onKeyDown={event => { if (event.key === "Enter") applyCorporationSearch(); }} /><button type="button" onClick={applyCorporationSearch}>搜索</button></div><div className="picker-columns"><div className="faction-list"><button className={!factionId && !corporationId ? "selected" : ""} type="button" onClick={() => { setFactionId(0); setCorporationId(0); setCorporationPickerOpen(false); setPage(1); }}>全部势力与企业 <span>›</span></button>{corporationGroups.map(group => <button className={pickerFactionId === group.faction_id ? "active" : ""} type="button" key={group.faction_id} onClick={() => setPickerFactionId(group.faction_id)}><EntityIcon id={group.faction_id} name={group.name} kind="faction" /><b className="entity-name">{group.name}</b><small>{group.corporations.length}</small><span>›</span></button>)}{ungroupedCorporations.length > 0 && <button className={pickerFactionId === 0 ? "active" : ""} type="button" onClick={() => setPickerFactionId(0)}>其他企业<small>{ungroupedCorporations.length}</small><span>›</span></button>}</div><div className="corporation-list">{pickerCorporations.length ? pickerCorporations.map(corporation => <button className={corporationId === corporation.corporation_id ? "selected" : ""} type="button" key={corporation.corporation_id} onClick={() => { setFactionId(corporation.faction_id || 0); setCorporationId(corporation.corporation_id); setCorporationPickerOpen(false); setPage(1); }}><EntityIcon id={corporation.corporation_id} name={corporation.name} kind="corporation" /><b className="entity-name">{corporation.name}</b><small>{corporation.offer_count} 个方案</small></button>) : <p>该分类暂无匹配企业</p>}</div></div></div>}</div>{corporationId > 0 && <select aria-label="每页数量" value={pageSize} onChange={event => { setPageSize(event.target.value); setPage(1); }}><option value="10">每页 10 条</option><option value="20">每页 20 条</option><option value="50">每页 50 条</option><option value="all">全部数据</option></select>}</div></div>
-      {corporationId ? <>{corporationCalculator}{lpOnlyImplantExchangePanel}{riskAwareImplantSetPanel}{boosterBlueprintToggle}{detailTable}{pageSize !== "all" && <div className="pagination"><button disabled={page <= 1} onClick={() => setPage(value => Math.max(1, value - 1))}>上一页</button><span>第 {page} / {detailPages} 页</span><button disabled={page >= detailPages} onClick={() => setPage(value => Math.min(detailPages, value + 1))}>下一页</button></div>}</> : <>{boosterBlueprintToggle}{rankingTable("热销榜", "前 100 条 · 按 30 日内日均交易量", visiblePopular, popularSort, key => toggleTableSort(setPopularSort, key))}{rankingPager("热销榜", popularPage, popularPageCount, setPopularPage)}{rankingTable("价值榜", "前 100 条 · 按最高收单价计算的税后单位 LP 利润", visibleRatio, ratioSort, key => toggleTableSort(setRatioSort, key))}{rankingPager("价值榜", ratioPage, ratioPageCount, setRatioPage)}</>}
+      {corporationId ? <>{corporationCalculator}{lpOnlyImplantExchangePanel}{riskAwareImplantSetPanel}{boosterBlueprintToggle}{detailTable}{pageSize !== "all" && <div className="pagination"><button disabled={safeDetailPage <= 1} onClick={() => setPage(value => Math.max(1, value - 1))}>上一页</button><span>第 {safeDetailPage} / {detailPages} 页</span><button disabled={safeDetailPage >= detailPages} onClick={() => setPage(value => Math.min(detailPages, value + 1))}>下一页</button></div>}</> : <>{boosterBlueprintToggle}{rankingTable("热销榜", "前 100 条 · 按 30 日内日均交易量", visiblePopular, popularSort, key => toggleTableSort(setPopularSort, key))}{rankingPager("热销榜", popularPage, popularPageCount, setPopularPage)}{rankingTable("价值榜", "前 100 条 · 按最高收单价计算的税后单位 LP 利润", visibleRatio, ratioSort, key => toggleTableSort(setRatioSort, key))}{rankingPager("价值榜", ratioPage, ratioPageCount, setRatioPage)}</>}
     </section>
     {marketTarget && <div className="market-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) closeMarket(); }}>
       <section className="market-modal" role="dialog" aria-modal="true" aria-labelledby="market-modal-title">

@@ -274,9 +274,8 @@ export async function GET(request: Request) {
       const items = levels.map(level => set.get(level)!);
       const chineseName = items[0].name_zh?.replace(/[—-]?(?:阿尔法|贝它|伽玛|德尔塔|伊普西隆|欧米伽)型$/, "").replace(/[—\-\s]+$/, "");
       const totalLp = items.reduce((sum, item) => sum + item.lp_cost, 0);
-      const plausibleBuy = (item: ImplantSetRow) => item.buy_price > 0 && !(item.expected_price > item.buy_price * 10 && item.sell_price > item.buy_price * 10);
-      const valuationPrice = (item: ImplantSetRow) => plausibleBuy(item) ? item.buy_price : item.expected_price > 0 ? item.expected_price : item.sell_price;
-      const priceSource = (item: ImplantSetRow) => plausibleBuy(item) ? "buy" : item.expected_price > 0 ? "expected" : item.sell_price > 0 ? "sell" : "missing";
+      const valuationPrice = (item: ImplantSetRow) => item.buy_price > 0 ? item.buy_price : item.expected_price;
+      const priceSource = (item: ImplantSetRow) => item.buy_price > 0 ? "buy" : item.expected_price > 0 ? "expected" : "missing";
       const marketValue = items.every(item => valuationPrice(item) > 0) ? items.reduce((sum, item) => sum + valuationPrice(item), 0) : null;
       const netProfit = marketValue !== null ? items.reduce((sum, item) => sum + valuationPrice(item) * 0.97 - item.isk_cost - item.material_cost, 0) : null;
       return { name: chineseName || name, is_blueprint: source === "blueprint", item_count: 6, total_lp: totalLp, lp_ratio: netProfit !== null && totalLp > 0 ? netProfit / totalLp : null, priced_count: items.filter(item => valuationPrice(item) > 0).length, market_value: marketValue, items: items.map((item, index) => ({ level: levels[index], type_id: item.blueprint_type_id, market_type_id: item.type_id, name: item.name_zh || item.name_en, lp_cost: item.lp_cost, buy_price: item.buy_price, expected_price: item.expected_price, sell_price: item.sell_price, valuation_price: valuationPrice(item), price_source: priceSource(item), materials: implantMaterials.get(`${item.corporation_id}:${item.offer_id}`) ?? [] })) };
