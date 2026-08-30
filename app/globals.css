@@ -289,6 +289,26 @@ main .results{padding-top:18px}
 .control-card.compact{margin-top:0}
 @media(max-width:760px){.corporation-favorites,.history-toolbar{margin-top:14px}main .results{padding-top:14px}.results>.section-head{margin-bottom:14px}}
 
+/* Mobile detail header: collapse the desktop grid so actions never overflow the viewport. */
+@media(max-width:760px){
+  .table>.ranking-head{display:block;min-width:0;padding:16px 14px 18px}
+  .table>.ranking-head>div:first-child{display:block;min-width:0}
+  .table>.ranking-head .eyebrow,.table>.ranking-head h2{grid-column:auto;grid-row:auto}
+  .table>.ranking-head h2{font-size:24px;line-height:1.2;margin:8px 0 0}
+  .table>.ranking-head>.detail-header-actions{display:flex;flex-direction:column;align-items:stretch;gap:10px;width:100%;margin-top:14px}
+  .table>.ranking-head>.detail-header-actions>.booster-blueprint-filter,
+  .table>.ranking-head>.detail-header-actions>.unvalued-filter{display:grid;grid-template-columns:minmax(0,1fr);width:100%;gap:8px;justify-content:stretch}
+  .table>.ranking-head>.detail-header-actions>.booster-blueprint-filter>span,
+  .table>.ranking-head>.detail-header-actions>.unvalued-filter>span{justify-self:start}
+  .table>.ranking-head>.detail-header-actions>.booster-blueprint-filter button,
+  .table>.ranking-head>.detail-header-actions>.unvalued-filter button,
+  .table>.ranking-head>.detail-header-actions>.unvalued-filter select{width:100%;min-width:0}
+  .detail-corporation-block{grid-column:auto;grid-row:auto;min-width:0}
+  .detail-corporation-card{width:100%;min-width:0}
+  .detail-corporation-card>span{min-width:0;flex:1}
+  .detail-corporation-card>button{margin-left:8px;flex:0 0 auto}
+}
+
 @media(min-width:761px){
   .history-comparison{gap:12px;padding-left:14px;padding-right:12px}
   .history-comparison>span:first-child,.history-comparison>b,.history-comparison>i,.history-comparison>small{flex:0 0 auto;white-space:nowrap}

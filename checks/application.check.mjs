@@ -119,6 +119,14 @@ check("企业选择器点击外部收起且不再显示当前结果搜索框", a
   assert.doesNotMatch(page, /搜索当前结果/);
 });
 
+check("手机端企业详情头部不横向溢出且 PC 布局保持独立", async () => {
+  const css = await source("app/globals.css");
+  assert.match(css, /@media\(max-width:760px\)\{\n  \.table>\.ranking-head\{display:block;min-width:0/);
+  assert.match(css, /\.table>\.ranking-head>\.detail-header-actions\{display:flex;flex-direction:column/);
+  assert.match(css, /\.detail-corporation-card\{width:100%;min-width:0\}/);
+  assert.match(css, /@media\(min-width:761px\)/);
+});
+
 check("手机端使用独立卡片且桌面表格保持默认显示", async () => {
   const [page, css] = await Promise.all([source("app/page.tsx"), source("app/globals.css")]);
   assert.match(page, /className="mobile-offer-card"/);
