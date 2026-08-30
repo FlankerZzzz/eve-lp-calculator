@@ -101,6 +101,24 @@ check("首页两个榜单使用独立且可切换的排序状态", async () => {
   assert.doesNotMatch(page, /sortedPopular.*b\.volume - a\.volume/);
 });
 
+check("军团收藏夹仅保存在浏览器本地并支持切换与取消", async () => {
+  const page = await source("app/page.tsx");
+  assert.match(page, /FAVORITE_CORPORATIONS_STORAGE_KEY/);
+  assert.match(page, /window\.localStorage\.setItem\(FAVORITE_CORPORATIONS_STORAGE_KEY/);
+  assert.match(page, /selectedCorporationIsFavorite \? "取消收藏" : "添加到收藏夹"/);
+  assert.match(page, /openFavoriteCorporation/);
+  assert.match(page, /setCorporationId\(0\)/);
+  assert.doesNotMatch(page, /fetch\([^\n]*favorite/i);
+});
+
+check("企业选择器点击外部收起且不再显示当前结果搜索框", async () => {
+  const page = await source("app/page.tsx");
+  assert.match(page, /corporationPickerRef/);
+  assert.match(page, /document\.addEventListener\("pointerdown", closeOnOutsideClick\)/);
+  assert.match(page, /corporationPickerRef\.current\?\.contains/);
+  assert.doesNotMatch(page, /搜索当前结果/);
+});
+
 check("手机端使用独立卡片且桌面表格保持默认显示", async () => {
   const [page, css] = await Promise.all([source("app/page.tsx"), source("app/globals.css")]);
   assert.match(page, /className="mobile-offer-card"/);
