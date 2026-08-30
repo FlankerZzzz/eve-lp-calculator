@@ -51,7 +51,7 @@ function implantMaterialRequirements(set: ImplantSet, setCount: number): Implant
   return [...totals.values()].map(material => ({ ...material, missing: Math.max(0, material.required - material.available) }));
 }
 const MAX_CALCULATION_LP = 99_990_000;
-const APP_VERSION = "V1.10.1";
+const APP_VERSION = "V1.10.2";
 const LP_STORAGE_KEY = "eve-lp-calculator:lp";
 const OPTIMIZATION_STORAGE_KEY = "eve-lp-calculator:optimization";
 

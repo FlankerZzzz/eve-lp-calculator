@@ -321,3 +321,9 @@ check("脑插目录由全量同步生成且合同按增量明细签名匹配", a
   assert.match(page, /公开合同价格/);
   assert.match(page, /implant-item-materials/);
 });
+
+check("合同地点使用国服吉他四卫星四名称", async () => {
+  const [route, daemon] = await Promise.all([source("app/api/data/contracts/route.ts"), source("scripts/contract-sync-daemon.mjs")]);
+  assert.match(route, /吉他 4 - 卫星 4 - 加达里海军组装车间/);
+  assert.match(daemon, /吉他 4 - 卫星 4 - 加达里海军组装车间/);
+});

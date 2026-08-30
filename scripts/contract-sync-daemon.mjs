@@ -260,7 +260,7 @@ async function fetchMissingDetails(candidates, metrics) {
 
 function contractLocation(contract) {
   if (contract.start_location_id === JITA_44_LOCATION_ID) {
-    return { solarSystemId: 30000142, name: "吉他 IV-月球 4·加达里海军组装厂" };
+    return { solarSystemId: 30000142, name: "吉他 4 - 卫星 4 - 加达里海军组装车间" };
   }
   return { solarSystemId: null, name: `空间站 #${contract.start_location_id}` };
 }
