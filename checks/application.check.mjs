@@ -104,12 +104,42 @@ check("首页两个榜单使用独立且可切换的排序状态", async () => {
 check("精选榜单支持仅展示可在高安执行任务的势力", async () => {
   const page = await source("app/page.tsx");
   assert.match(page, /HIGH_SEC_FACTION_IDS = new Set\(\[500001, 500002, 500003, 500004, 500007, 500008, 500015, 500016\]\)/);
-  for (const corporationId of [1000179, 1000180, 1000181, 1000182, 1000283, 1000284, 1000285, 1000286]) {
+  for (const corporationId of [1000179, 1000180, 1000181, 1000182]) {
     assert.match(page, new RegExp(String(corporationId)));
   }
   assert.match(page, /calculated\.filter\(isHighSecOffer\)/);
   assert.match(page, /仅展示高安势力/);
   assert.match(page, /aria-pressed=\{showHighSecOnly\}/);
+});
+
+check("四个涂装兑换军团在展示、榜单和市场同步中永久排除", async () => {
+  const [policy, options, offers, rankings, history, orders, status, syncPage] = await Promise.all([
+    source("lib/data-policy.ts"),
+    source("app/api/data/options/route.ts"),
+    source("app/api/data/offers/route.ts"),
+    source("app/api/sync/rankings/route.ts"),
+    source("app/api/sync/history/route.ts"),
+    source("scripts/order-sync-daemon.mjs"),
+    source("app/api/sync/status/route.ts"),
+    source("app/sync/page.tsx"),
+  ]);
+  for (const corporationId of [1000283, 1000284, 1000285, 1000286]) assert.match(policy, new RegExp(String(corporationId)));
+  assert.match(policy, /涂装专属兑换军团/);
+  assert.match(options, /visibleCorporationSql/);
+  assert.match(offers, /isGloballyExcludedCorporation\(corporationId, corporation\.faction_id\)/);
+  assert.match(offers, /!isGloballyExcludedCorporation\(offer\.corporation_id, offer\.faction_id\)/);
+  assert.match(rankings, /!isGloballyExcludedCorporation\(Number\(offer\?\.corporation_id\)/);
+  assert.match(history, /visibleCorporationSql/);
+  assert.match(orders, /visibleCorporationSql/);
+  assert.match(status, /invalidItemCte[\s\S]*has_invalid_source[\s\S]*has_visible_source/);
+  assert.match(syncPage, /显示无效数据/);
+  assert.match(syncPage, /排除势力与军团/);
+  assert.match(syncPage, /永久跳过市场查询的物品/);
+});
+
+check("组合优化同时排除材料和产出订单深度不足的方案", async () => {
+  const page = await source("app/page.tsx");
+  assert.match(page, /offer\.materialsCovered && offer\.outputCovered/);
 });
 
 check("军团收藏夹仅保存在浏览器本地并支持切换与取消", async () => {
@@ -163,7 +193,7 @@ check("增效剂蓝图默认过滤且可以手动显示", async () => {
   assert.match(page, /隐藏增效剂蓝图/);
   assert.match(worker, /include_booster_blueprints: "1"/);
   assert.match(worker, /slice\(0, 100\)/);
-  assert.match(rankings, /rows\.slice\(0, 100\)/);
+  assert.match(rankings, /visibleRows = rows\.filter[\s\S]*\.slice\(0, 100\)/);
   assert.match(route, /filter\(offer => includeBoosterBlueprints \|\| !isBoosterBlueprint\(offer\)\)\.slice\(0, 100\)/);
 });
 

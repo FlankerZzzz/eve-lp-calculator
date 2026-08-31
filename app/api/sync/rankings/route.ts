@@ -1,5 +1,6 @@
 import { ensureSchema } from "../../../../db/d1";
 import { updateSyncJob } from "../../../../db/sync-state";
+import { isGloballyExcludedCorporation } from "../../../../lib/data-policy";
 
 const RANKING_HOURS = [9, 15, 18, 21];
 const chinaParts = (date = new Date()) => Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
@@ -37,10 +38,16 @@ export async function POST(request: Request) {
   const now = new Date().toISOString();
   const date = chinaDate();
   const statements = [db.prepare("DELETE FROM ranking_snapshots")];
+  const savedCounts = { popular: 0, highRatio: 0 };
   for (const [kind, rows] of [["popular", body.popular], ["highRatio", body.highRatio]] as const) {
-    rows.slice(0, 100).forEach((row, index) => statements.push(db.prepare("INSERT INTO ranking_snapshots (list_kind, rank, snapshot_date, calculated_at, payload) VALUES (?, ?, ?, ?, ?)").bind(kind, index + 1, date, now, JSON.stringify(row))));
+    const visibleRows = rows.filter(row => {
+      const offer = row as { corporation_id?: unknown; faction_id?: unknown };
+      return !isGloballyExcludedCorporation(Number(offer?.corporation_id), offer?.faction_id === null ? null : Number(offer?.faction_id));
+    }).slice(0, 100);
+    savedCounts[kind] = visibleRows.length;
+    visibleRows.forEach((row, index) => statements.push(db.prepare("INSERT INTO ranking_snapshots (list_kind, rank, snapshot_date, calculated_at, payload) VALUES (?, ?, ?, ?, ?)").bind(kind, index + 1, date, now, JSON.stringify(row))));
   }
   await db.batch(statements);
-  await updateSyncJob({ kind: "rankings", status: "complete", phase: "本时段榜单已更新", remaining: 0, endpoint: "/api/sync/rankings", httpStatus: 200, response: { snapshotDate: date, slot: dueRankingSlot(), popular: body.popular.length, highRatio: body.highRatio.length } });
+  await updateSyncJob({ kind: "rankings", status: "complete", phase: "本时段榜单已更新", remaining: 0, endpoint: "/api/sync/rankings", httpStatus: 200, response: { snapshotDate: date, slot: dueRankingSlot(), popular: savedCounts.popular, highRatio: savedCounts.highRatio } });
   return Response.json({ ok: true, snapshotDate: date, calculatedAt: now });
 }

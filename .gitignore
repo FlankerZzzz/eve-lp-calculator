@@ -47,6 +47,7 @@ next-env.d.ts
 /work/
 /backups/
 /.codex-deploy/
+/AGENTS.md
 
 # local persistent runtime data
 /.data/

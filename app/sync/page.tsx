@@ -18,7 +18,8 @@ type Job = {
   updated_at: string;
 };
 type Event = { id: number; kind: SyncKind; phase: string | null; endpoint: string | null; http_status: number | null; response: string | null; created_at: string };
-type Counts = { corporation_total: number; corporation_synced: number; item_total: number; item_named: number; invalid_items: number; offers: number; history_rows: number; history_types: number; order_types: number };
+type Counts = { corporation_total: number; corporation_synced: number; item_total: number; item_named: number; invalid_entities: number; invalid_items: number; offers: number; history_rows: number; history_types: number; order_types: number };
+type InvalidEntity = { entity_type: "势力" | "军团"; entity_id: number; name: string; invalid_reason: string | null };
 type InvalidItem = { type_id: number; name: string; invalid_reason: string | null };
 
 const labels: Record<SyncKind, { title: string; description: string }> = {
@@ -28,7 +29,7 @@ const labels: Record<SyncKind, { title: string; description: string }> = {
   rankings: { title: "首页榜单", description: "每天自动计算一次并固定保存；首页只读取快照，不现场计算" },
 };
 
-const emptyCounts: Counts = { corporation_total: 0, corporation_synced: 0, item_total: 0, item_named: 0, invalid_items: 0, offers: 0, history_rows: 0, history_types: 0, order_types: 0 };
+const emptyCounts: Counts = { corporation_total: 0, corporation_synced: 0, item_total: 0, item_named: 0, invalid_entities: 0, invalid_items: 0, offers: 0, history_rows: 0, history_types: 0, order_types: 0 };
 
 export default function SyncPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -37,23 +38,25 @@ export default function SyncPage() {
   const [message, setMessage] = useState("正在读取同步状态…");
   const [pendingKind, setPendingKind] = useState<SyncKind | null>(null);
   const [showInvalid, setShowInvalid] = useState(false);
+  const [invalidEntities, setInvalidEntities] = useState<InvalidEntity[]>([]);
   const [invalidItems, setInvalidItems] = useState<InvalidItem[]>([]);
 
   const refreshStatus = useCallback(async () => {
     const response = await fetch(`/api/sync/status${showInvalid ? "?show_invalid=1" : ""}`, { cache: "no-store" });
     if (!response.ok) throw new Error("无法读取同步状态");
-    const data = await response.json() as { jobs: Job[]; events: Event[]; counts: Counts; invalidItems: InvalidItem[] };
+    const data = await response.json() as { jobs: Job[]; events: Event[]; counts: Counts; invalidEntities: InvalidEntity[]; invalidItems: InvalidItem[] };
     setJobs(data.jobs);
     setEvents(data.events);
     setCounts(data.counts || emptyCounts);
+    setInvalidEntities(data.invalidEntities || []);
     setInvalidItems(data.invalidItems || []);
   }, [showInvalid]);
 
   useEffect(() => {
     refreshStatus().then(() => setMessage("同步控制台已就绪")).catch(error => setMessage(error instanceof Error ? error.message : "状态读取失败"));
-    const timer = setInterval(() => refreshStatus().catch(() => undefined), 1000);
+    const timer = setInterval(() => refreshStatus().catch(() => undefined), showInvalid ? 10000 : 1000);
     return () => clearInterval(timer);
-  }, [refreshStatus]);
+  }, [refreshStatus, showInvalid]);
 
   async function control(kind: SyncKind, action: "start" | "pause" | "restart") {
     setPendingKind(kind);
@@ -86,7 +89,7 @@ export default function SyncPage() {
       <Link className="nav-action" href="/">返回收益分析 →</Link>
     </nav>
 
-    <header className="sync-header"><div><div className="hero-kicker"><span>SUBSPACE DATA OPERATIONS</span><i>PRIVATE NETWORK</i></div><p className="eyebrow">/SYNC</p><h1>数据同步状态</h1><p>同步循环运行在本地服务端。刷新或关闭网页不会中断作业；只有关闭 3000 端口服务才会停止。每次仅执行一个保守的小批次。</p></div><button className={`invalid-toggle ${showInvalid ? "active" : ""}`} onClick={() => setShowInvalid(value => !value)}>{showInvalid ? "隐藏无效数据" : `显示无效数据（${counts.invalid_items}）`}</button></header>
+    <header className="sync-header"><div><div className="hero-kicker"><span>SUBSPACE DATA OPERATIONS</span><i>PRIVATE NETWORK</i></div><p className="eyebrow">/SYNC</p><h1>数据同步状态</h1><p>同步循环运行在本地服务端。刷新或关闭网页不会中断作业；只有关闭 3000 端口服务才会停止。每次仅执行一个保守的小批次。</p></div><button className={`invalid-toggle ${showInvalid ? "active" : ""}`} onClick={() => setShowInvalid(value => !value)}>{showInvalid ? "隐藏无效数据" : "显示无效数据"}</button></header>
 
     <section className="metric-grid">
       <div><span>军团</span><strong>{counts.corporation_synced}<small> / {counts.corporation_total}</small></strong></div>
@@ -117,7 +120,13 @@ export default function SyncPage() {
       })}
     </section>
 
-    {showInvalid && <section className="invalid-panel"><div className="panel-title"><h2>无效市场物品</h2><span>仅供查看 · 永久跳过市场查询</span></div>{invalidItems.length ? <div className="invalid-items">{invalidItems.map(item => <div key={item.type_id}><code>{item.type_id}</code><b>{item.name}</b><span>{item.invalid_reason || "市场不可交易或物品不存在"}</span></div>)}</div> : <p className="no-events">目前没有已标记的无效物品</p>}</section>}
+    {showInvalid && <section className="invalid-panel">
+      <div className="panel-title"><h2>无效数据策略</h2><span>仅供审计 · 原始目录保留，公开结果与市场同步排除</span></div>
+      <h3 className="invalid-section-title">排除势力与军团</h3>
+      <div className="invalid-items invalid-entities">{invalidEntities.map(entity => <div key={`${entity.entity_type}:${entity.entity_id}`}><code>{entity.entity_id}</code><b>{entity.entity_type} · {entity.name}</b><span>{entity.invalid_reason || "按数据策略排除"}</span></div>)}</div>
+      <h3 className="invalid-section-title">永久跳过市场查询的物品</h3>
+      {invalidItems.length ? <div className="invalid-items">{invalidItems.map(item => <div key={item.type_id}><code>{item.type_id}</code><b>{item.name}</b><span>{item.invalid_reason || "仅与已排除来源关联"}</span></div>)}</div> : <p className="no-events">目前没有仅与排除来源关联的市场物品</p>}
+    </section>}
 
     <section className="sync-detail-grid">
       <article className="response-panel"><div className="panel-title"><h2>当前作业与接口返回</h2><span>{currentJob ? labels[currentJob.kind].title : "无活动作业"}</span></div><dl><div><dt>阶段</dt><dd>{currentJob?.phase || "—"}</dd></div><div><dt>接口</dt><dd>{currentJob?.last_endpoint || "—"}</dd></div><div><dt>状态码</dt><dd>{currentJob?.last_http_status || "—"}</dd></div></dl><pre>{currentJob?.last_response || currentJob?.error || "尚未产生接口返回"}</pre></article>

@@ -51,14 +51,13 @@ function implantMaterialRequirements(set: ImplantSet, setCount: number): Implant
   return [...totals.values()].map(material => ({ ...material, missing: Math.max(0, material.required - material.available) }));
 }
 const MAX_CALCULATION_LP = 99_990_000;
-const APP_VERSION = "V1.11.2";
+const APP_VERSION = "V1.11.3";
 const LP_STORAGE_KEY = "eve-lp-calculator:lp";
 const OPTIMIZATION_STORAGE_KEY = "eve-lp-calculator:optimization";
 const FAVORITE_CORPORATIONS_STORAGE_KEY = "eve-lp-calculator:favorite-corporations";
 const HIGH_SEC_FACTION_IDS = new Set([500001, 500002, 500003, 500004, 500007, 500008, 500015, 500016]);
 const HIGH_SEC_EXCLUDED_CORPORATION_IDS = new Set([
   1000179, 1000180, 1000181, 1000182,
-  1000283, 1000284, 1000285, 1000286,
 ]);
 
 function isHighSecOffer(offer: StoredOffer) {
@@ -422,7 +421,7 @@ export default function Home() {
       const response = await fetch(`/api/data/offers?${params}`, { cache: "no-store" });
       if (!response.ok) throw new Error("无法读取当前企业全部兑换方案");
       const data = await response.json() as { offers: StoredOffer[] };
-      const candidates = calculate(data.offers).filter(offer => offer.lp_cost > 0 && offer.minProfit !== null && offer.minProfit > 0 && offer.materialsCovered);
+      const candidates = calculate(data.offers).filter(offer => offer.lp_cost > 0 && offer.minProfit !== null && offer.minProfit > 0 && offer.materialsCovered && offer.outputCovered);
       if (!candidates.length) throw new Error("当前企业没有收单价完整且税后盈利的兑换方案");
       const gcd = (a: number, b: number): number => b ? gcd(b, a % b) : a;
       const lpUnit = candidates.reduce((value, offer) => gcd(value, offer.lp_cost), candidates[0].lp_cost);

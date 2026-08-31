@@ -1,5 +1,5 @@
 import { ensureSchema } from "../../../../db/d1";
-import { HIDDEN_FACTION_SQL } from "../../../../lib/data-policy";
+import { isGloballyExcludedCorporation, visibleCorporationSql } from "../../../../lib/data-policy";
 import { MARKET_REGION_ID } from "../../../../lib/esi-server";
 
 type OfferRow = {
@@ -18,6 +18,7 @@ type HistoryRow = { type_id: number; trade_date: string; average_price: number; 
 type DailyVolumePoint = { trade_date: string; volume: number };
 type ImplantSetRow = { corporation_id: number; offer_id: number; type_id: number; blueprint_type_id: number; is_blueprint: number; name_en: string; name_zh: string | null; buy_price: number; sell_price: number; expected_price: number; lp_cost: number; isk_cost: number; material_cost: number };
 const finiteNumber = (value: string | null, fallback: number) => value === null || value.trim() === "" ? fallback : Number(value);
+const visibleCorporation = visibleCorporationSql("c");
 const HISTORY_WINDOWS = [30, 15, 7, 3, 1] as const;
 const emptyHistory = (): HistoryPrices => ({ 30: 0, 15: 0, 7: 0, 3: 0, 1: 0 });
 const chinaDate = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -57,6 +58,10 @@ export async function GET(request: Request) {
   if (![daysRaw, taxRaw, factionId, corporationId, pageRaw].every(Number.isFinite) || daysRaw < 1 || taxRaw < 0 || taxRaw > 100 || factionId < 0 || corporationId < 0 || pageRaw < 1) {
     return Response.json({ error: "查询参数无效" }, { status: 400 });
   }
+  if (corporationId) {
+    const corporation = await db.prepare("SELECT faction_id FROM corporations WHERE corporation_id=?").bind(corporationId).first<{ faction_id: number | null }>();
+    if (corporation && isGloballyExcludedCorporation(corporationId, corporation.faction_id)) return Response.json({ error: "该企业已按数据策略排除" }, { status: 404 });
+  }
   const days = Math.min(365, Math.floor(daysRaw));
   const tax = taxRaw;
   const page = Math.floor(pageRaw);
@@ -76,7 +81,7 @@ export async function GET(request: Request) {
     OR LOWER(COALESCE(t.name_en, '')) LIKE '%booster%blueprint%'
     OR LOWER(COALESCE(pt.name_en, '')) LIKE '%booster%'
   ))`);
-  const where = `WHERE c.faction_id NOT IN (${HIDDEN_FACTION_SQL})${conditions.length ? ` AND ${conditions.join(" AND ")}` : ""}`;
+  const where = `WHERE ${visibleCorporation}${conditions.length ? ` AND ${conditions.join(" AND ")}` : ""}`;
 
   const baseSql = `
     WITH recent AS (
@@ -285,7 +290,7 @@ export async function GET(request: Request) {
 
   const snapshots = (await db.prepare("SELECT list_kind, rank, snapshot_date, calculated_at, payload FROM ranking_snapshots WHERE rank <= 100 ORDER BY list_kind, rank").all<{ list_kind: string; rank: number; snapshot_date: string; calculated_at: string; payload: string }>()).results;
   const isBoosterBlueprint = (offer: OfferRow) => Boolean(offer.is_blueprint) && /增效体|增效剂|booster/i.test(`${offer.item_name || ""} ${offer.product_name || ""}`);
-  const parse = (kind: string) => snapshots.filter(row => row.list_kind === kind).map(row => JSON.parse(row.payload) as OfferRow & { materials?: MaterialRow[] }).filter(offer => includeBoosterBlueprints || !isBoosterBlueprint(offer)).slice(0, 100);
+  const parse = (kind: string) => snapshots.filter(row => row.list_kind === kind).map(row => JSON.parse(row.payload) as OfferRow & { materials?: MaterialRow[] }).filter(offer => !isGloballyExcludedCorporation(offer.corporation_id, offer.faction_id)).filter(offer => includeBoosterBlueprints || !isBoosterBlueprint(offer)).slice(0, 100);
   const hydrateSnapshot = async (offers: (OfferRow & { materials?: MaterialRow[] })[]) => {
     const materialMap = new Map<string, MaterialRow[]>();
     for (const offer of offers) materialMap.set(`${offer.corporation_id}:${offer.offer_id}`, offer.materials ?? []);
