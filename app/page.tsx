@@ -51,10 +51,21 @@ function implantMaterialRequirements(set: ImplantSet, setCount: number): Implant
   return [...totals.values()].map(material => ({ ...material, missing: Math.max(0, material.required - material.available) }));
 }
 const MAX_CALCULATION_LP = 99_990_000;
-const APP_VERSION = "V1.11.1";
+const APP_VERSION = "V1.11.2";
 const LP_STORAGE_KEY = "eve-lp-calculator:lp";
 const OPTIMIZATION_STORAGE_KEY = "eve-lp-calculator:optimization";
 const FAVORITE_CORPORATIONS_STORAGE_KEY = "eve-lp-calculator:favorite-corporations";
+const HIGH_SEC_FACTION_IDS = new Set([500001, 500002, 500003, 500004, 500007, 500008, 500015, 500016]);
+const HIGH_SEC_EXCLUDED_CORPORATION_IDS = new Set([
+  1000179, 1000180, 1000181, 1000182,
+  1000283, 1000284, 1000285, 1000286,
+]);
+
+function isHighSecOffer(offer: StoredOffer) {
+  return offer.faction_id !== null
+    && HIGH_SEC_FACTION_IDS.has(offer.faction_id)
+    && !HIGH_SEC_EXCLUDED_CORPORATION_IDS.has(offer.corporation_id);
+}
 
 async function copyText(text: string) {
   if (window.isSecureContext && navigator.clipboard?.writeText) {
@@ -167,6 +178,7 @@ export default function Home() {
   const [rankingPageSize, setRankingPageSize] = useState("10");
   const [showBoosterBlueprints, setShowBoosterBlueprints] = useState(false);
   const [showUnvaluedOnly, setShowUnvaluedOnly] = useState(false);
+  const [showHighSecOnly, setShowHighSecOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("正在读取本地数据库…");
   const [databaseState, setDatabaseState] = useState<"CHECKING" | "ONLINE" | "OFFLINE">("CHECKING");
@@ -462,8 +474,14 @@ export default function Home() {
   }, [calculate, corporationId, lp, showBoosterBlueprints, tax, windowDays]);
 
   const detailCalculated = useMemo(() => calculate(detailOffers), [calculate, detailOffers]);
-  const popularCalculated = useMemo(() => calculate(popularOffers), [calculate, popularOffers]);
-  const ratioCalculated = useMemo(() => calculate(highRatioOffers), [calculate, highRatioOffers]);
+  const popularCalculated = useMemo(() => {
+    const calculated = calculate(popularOffers);
+    return showHighSecOnly ? calculated.filter(isHighSecOffer) : calculated;
+  }, [calculate, popularOffers, showHighSecOnly]);
+  const ratioCalculated = useMemo(() => {
+    const calculated = calculate(highRatioOffers);
+    return showHighSecOnly ? calculated.filter(isHighSecOffer) : calculated;
+  }, [calculate, highRatioOffers, showHighSecOnly]);
   const latestPublishedTradeDate = useMemo(() => [...detailOffers, ...popularOffers, ...highRatioOffers]
     .flatMap(offer => publishedVolumePoints(offer.daily_volumes ?? []).map(point => point.trade_date))
     .sort()
@@ -649,7 +667,7 @@ export default function Home() {
     </section>
     <div className="history-toolbar"><span>市场基准价</span>{historySelector}<small>即时收益按订单深度成交；历史收益按所选周期成交均价估算</small></div>
 
-    <section className="results"><div className="section-head"><div>{corporationId > 0 && <p className="eyebrow">企业详情</p>}<h2>{corporationId ? "全部兑换方案" : "精选兑换方案"}</h2><p className="sub">{corporationId ? "具体企业使用数据库分页查询 · " : ""}基于伏尔戈市场 {windowDays} 天历史交易数据</p></div><div className="filters"><div className="corporation-picker" ref={corporationPickerRef}><button className="picker-trigger" type="button" aria-expanded={corporationPickerOpen} onClick={() => { const opening = !corporationPickerOpen; setCorporationPickerOpen(opening); if (opening && !pickerFactionId) setPickerFactionId(factionId || corporationGroups[0]?.faction_id || 0); }}><span>{selectedFaction?.name || "全部势力"} <b>/</b> {selectedCorporation?.name || "全部企业"}</span><i>{corporationPickerOpen ? "⌃" : "⌄"}</i></button>{corporationPickerOpen && <div className="picker-menu"><div className="picker-search"><input aria-label="搜索企业" autoFocus placeholder="输入企业中文或英文名" value={corporationSearchInput} onChange={event => setCorporationSearchInput(event.target.value)} onKeyDown={event => { if (event.key === "Enter") applyCorporationSearch(); }} /><button type="button" onClick={applyCorporationSearch}>搜索</button></div><div className="picker-columns"><div className="faction-list"><button className={!factionId && !corporationId ? "selected" : ""} type="button" onClick={() => { setFactionId(0); setCorporationId(0); setCorporationPickerOpen(false); setPage(1); }}>全部势力与企业 <span>›</span></button>{corporationGroups.map(group => <button className={pickerFactionId === group.faction_id ? "active" : ""} type="button" key={group.faction_id} onClick={() => setPickerFactionId(group.faction_id)}><EntityIcon id={group.faction_id} name={group.name} kind="faction" /><b className="entity-name">{group.name}</b><small>{group.corporations.length}</small><span>›</span></button>)}{ungroupedCorporations.length > 0 && <button className={pickerFactionId === 0 ? "active" : ""} type="button" onClick={() => setPickerFactionId(0)}>其他企业<small>{ungroupedCorporations.length}</small><span>›</span></button>}</div><div className="corporation-list">{pickerCorporations.length ? pickerCorporations.map(corporation => <button className={corporationId === corporation.corporation_id ? "selected" : ""} type="button" key={corporation.corporation_id} onClick={() => { setFactionId(corporation.faction_id || 0); setCorporationId(corporation.corporation_id); setCorporationPickerOpen(false); setPage(1); }}><EntityIcon id={corporation.corporation_id} name={corporation.name} kind="corporation" /><b className="entity-name">{corporation.name}</b><small>{corporation.offer_count} 个方案</small></button>) : <p>该分类暂无匹配企业</p>}</div></div></div>}</div>{corporationId > 0 && <select aria-label="每页数量" value={pageSize} onChange={event => { setPageSize(event.target.value); setPage(1); }}><option value="10">每页 10 条</option><option value="20">每页 20 条</option><option value="50">每页 50 条</option><option value="all">全部数据</option></select>}</div></div>
+    <section className="results"><div className="section-head"><div>{corporationId > 0 && <p className="eyebrow">企业详情</p>}<h2>{corporationId ? "全部兑换方案" : "精选兑换方案"}</h2><p className="sub">{corporationId ? "具体企业使用数据库分页查询 · " : ""}基于伏尔戈市场 {windowDays} 天历史交易数据</p></div><div className="filters">{corporationId === 0 && <button type="button" className={`high-sec-filter${showHighSecOnly ? " active" : ""}`} aria-pressed={showHighSecOnly} onClick={() => { setShowHighSecOnly(current => !current); setPopularPage(1); setRatioPage(1); }}>{showHighSecOnly ? "已仅展示高安势力" : "仅展示高安势力"}</button>}<div className="corporation-picker" ref={corporationPickerRef}><button className="picker-trigger" type="button" aria-expanded={corporationPickerOpen} onClick={() => { const opening = !corporationPickerOpen; setCorporationPickerOpen(opening); if (opening && !pickerFactionId) setPickerFactionId(factionId || corporationGroups[0]?.faction_id || 0); }}><span>{selectedFaction?.name || "全部势力"} <b>/</b> {selectedCorporation?.name || "全部企业"}</span><i>{corporationPickerOpen ? "⌃" : "⌄"}</i></button>{corporationPickerOpen && <div className="picker-menu"><div className="picker-search"><input aria-label="搜索企业" autoFocus placeholder="输入企业中文或英文名" value={corporationSearchInput} onChange={event => setCorporationSearchInput(event.target.value)} onKeyDown={event => { if (event.key === "Enter") applyCorporationSearch(); }} /><button type="button" onClick={applyCorporationSearch}>搜索</button></div><div className="picker-columns"><div className="faction-list"><button className={!factionId && !corporationId ? "selected" : ""} type="button" onClick={() => { setFactionId(0); setCorporationId(0); setCorporationPickerOpen(false); setPage(1); }}>全部势力与企业 <span>›</span></button>{corporationGroups.map(group => <button className={pickerFactionId === group.faction_id ? "active" : ""} type="button" key={group.faction_id} onClick={() => setPickerFactionId(group.faction_id)}><EntityIcon id={group.faction_id} name={group.name} kind="faction" /><b className="entity-name">{group.name}</b><small>{group.corporations.length}</small><span>›</span></button>)}{ungroupedCorporations.length > 0 && <button className={pickerFactionId === 0 ? "active" : ""} type="button" onClick={() => setPickerFactionId(0)}>其他企业<small>{ungroupedCorporations.length}</small><span>›</span></button>}</div><div className="corporation-list">{pickerCorporations.length ? pickerCorporations.map(corporation => <button className={corporationId === corporation.corporation_id ? "selected" : ""} type="button" key={corporation.corporation_id} onClick={() => { setFactionId(corporation.faction_id || 0); setCorporationId(corporation.corporation_id); setCorporationPickerOpen(false); setPage(1); }}><EntityIcon id={corporation.corporation_id} name={corporation.name} kind="corporation" /><b className="entity-name">{corporation.name}</b><small>{corporation.offer_count} 个方案</small></button>) : <p>该分类暂无匹配企业</p>}</div></div></div>}</div>{corporationId > 0 && <select aria-label="每页数量" value={pageSize} onChange={event => { setPageSize(event.target.value); setPage(1); }}><option value="10">每页 10 条</option><option value="20">每页 20 条</option><option value="50">每页 50 条</option><option value="all">全部数据</option></select>}</div></div>
       {corporationId ? <>{corporationCalculator}{lpOnlyImplantExchangePanel}{riskAwareImplantSetPanel}{boosterBlueprintToggle}{detailTable}{pageSize !== "all" && <div className="pagination"><button disabled={safeDetailPage <= 1} onClick={() => setPage(value => Math.max(1, value - 1))}>上一页</button><span>第 {safeDetailPage} / {detailPages} 页</span><button disabled={safeDetailPage >= detailPages} onClick={() => setPage(value => Math.min(detailPages, value + 1))}>下一页</button></div>}</> : <>{boosterBlueprintToggle}{rankingTable("热销榜", "前 100 条 · 按 30 日内日均交易量", visiblePopular, popularSort, key => toggleTableSort(setPopularSort, key))}{rankingPager("热销榜", popularPage, popularPageCount, setPopularPage)}{rankingTable("价值榜", "前 100 条 · 按最高收单价计算的税后单位 LP 利润", visibleRatio, ratioSort, key => toggleTableSort(setRatioSort, key))}{rankingPager("价值榜", ratioPage, ratioPageCount, setRatioPage)}</>}
     </section>
     {marketTarget && <div className="market-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) closeMarket(); }}>

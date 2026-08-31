@@ -101,6 +101,17 @@ check("首页两个榜单使用独立且可切换的排序状态", async () => {
   assert.doesNotMatch(page, /sortedPopular.*b\.volume - a\.volume/);
 });
 
+check("精选榜单支持仅展示可在高安执行任务的势力", async () => {
+  const page = await source("app/page.tsx");
+  assert.match(page, /HIGH_SEC_FACTION_IDS = new Set\(\[500001, 500002, 500003, 500004, 500007, 500008, 500015, 500016\]\)/);
+  for (const corporationId of [1000179, 1000180, 1000181, 1000182, 1000283, 1000284, 1000285, 1000286]) {
+    assert.match(page, new RegExp(String(corporationId)));
+  }
+  assert.match(page, /calculated\.filter\(isHighSecOffer\)/);
+  assert.match(page, /仅展示高安势力/);
+  assert.match(page, /aria-pressed=\{showHighSecOnly\}/);
+});
+
 check("军团收藏夹仅保存在浏览器本地并支持切换与取消", async () => {
   const page = await source("app/page.tsx");
   assert.match(page, /FAVORITE_CORPORATIONS_STORAGE_KEY/);
