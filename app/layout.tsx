@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LP / 换算器 · 晨曦 ESI",
-  description: "EVE Online 晨曦服忠诚点兑换收益分析工具。",
+  title: "晨曦服 LP 兑换收益分析",
+  description: "基于晨曦服市场订单、历史成交与忠诚点商店数据的 LP 兑换收益分析工具。",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

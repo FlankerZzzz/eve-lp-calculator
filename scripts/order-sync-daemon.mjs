@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
-import { visibleCorporationSql } from "../lib/data-policy.ts";
+import { visibleCorporationSql, visibleOfferSql } from "../lib/data-policy.ts";
 import { summarize } from "./order-fetch-process.mjs";
 
 const ESI_BASE = (process.env.ESI_BASE_URL || "https://ali-esi.evepc.163.com").replace(/\/$/, "");
@@ -30,7 +30,8 @@ db.exec(`
 `);
 
 const visibleCorporation = visibleCorporationSql("c");
-const visible = `(EXISTS (SELECT 1 FROM lp_offers o JOIN corporations c ON c.corporation_id=o.corporation_id WHERE o.type_id=item_types.type_id AND ${visibleCorporation}) OR EXISTS (SELECT 1 FROM lp_offer_materials m JOIN corporations c ON c.corporation_id=m.corporation_id WHERE m.type_id=item_types.type_id AND ${visibleCorporation}) OR EXISTS (SELECT 1 FROM blueprint_recipes b JOIN lp_offers o ON o.type_id=b.blueprint_type_id JOIN corporations c ON c.corporation_id=o.corporation_id WHERE b.product_type_id=item_types.type_id AND ${visibleCorporation}) OR EXISTS (SELECT 1 FROM blueprint_materials bm JOIN lp_offers o ON o.type_id=bm.blueprint_type_id JOIN corporations c ON c.corporation_id=o.corporation_id WHERE bm.material_type_id=item_types.type_id AND ${visibleCorporation}))`;
+const visibleOffer = visibleOfferSql("o");
+const visible = `(EXISTS (SELECT 1 FROM lp_offers o JOIN corporations c ON c.corporation_id=o.corporation_id WHERE o.type_id=item_types.type_id AND ${visibleCorporation} AND ${visibleOffer}) OR EXISTS (SELECT 1 FROM lp_offer_materials m JOIN lp_offers o ON o.corporation_id=m.corporation_id AND o.offer_id=m.offer_id JOIN corporations c ON c.corporation_id=o.corporation_id WHERE m.type_id=item_types.type_id AND ${visibleCorporation} AND ${visibleOffer}) OR EXISTS (SELECT 1 FROM blueprint_recipes b JOIN lp_offers o ON o.type_id=b.blueprint_type_id JOIN corporations c ON c.corporation_id=o.corporation_id WHERE b.product_type_id=item_types.type_id AND ${visibleCorporation} AND ${visibleOffer}) OR EXISTS (SELECT 1 FROM blueprint_materials bm JOIN lp_offers o ON o.type_id=bm.blueprint_type_id JOIN corporations c ON c.corporation_id=o.corporation_id WHERE bm.material_type_id=item_types.type_id AND ${visibleCorporation} AND ${visibleOffer}))`;
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 const retryableStatus = status => status === 420 || status === 429 || status >= 500;
 

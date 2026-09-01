@@ -23,17 +23,25 @@
 *.pem
 *.key
 *.ppk
+*.p12
+*.pfx
 id_rsa*
 id_ed25519*
+.ssh/
 
 # debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
+*.bak
+*.backup
 
 # env files (can opt-in for committing if needed)
 .env*
+.npmrc
+.netrc
 
 # vercel
 .vercel
@@ -53,3 +61,7 @@ next-env.d.ts
 /.data/
 /docker-data/
 /.pnpm-store/
+*.db
+*.db-*
+*.sqlite3
+*.sqlite3-*

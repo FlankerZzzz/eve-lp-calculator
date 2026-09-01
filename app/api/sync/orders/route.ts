@@ -1,7 +1,10 @@
 import { ensureSchema } from "../../../../db/d1";
 import { updateSyncJob } from "../../../../db/sync-state";
+import { authorizeInternalSync } from "../../../../lib/sync-auth";
 
 export async function POST(request: Request) {
+  const unauthorized = authorizeInternalSync(request);
+  if (unauthorized) return unauthorized;
   const db = await ensureSchema();
   const body = await request.json().catch(() => ({})) as { runStartedAt?: string };
   const runStartedAt = body.runStartedAt || new Date().toISOString();

@@ -1,9 +1,9 @@
 import { ensureSchema } from "../../../../db/d1";
-import { isGloballyExcludedCorporation, visibleCorporationSql } from "../../../../lib/data-policy";
+import { isGloballyExcludedCorporation, visibleCorporationSql, visibleOfferSql } from "../../../../lib/data-policy";
 import { MARKET_REGION_ID } from "../../../../lib/esi-server";
 
 type OfferRow = {
-  corporation_id: number; offer_id: number; type_id: number; quantity: number; lp_cost: number; isk_cost: number;
+  corporation_id: number; offer_id: number; type_id: number; quantity: number; lp_cost: number; isk_cost: number; ak_cost: number;
   corporation_name: string; faction_id: number | null; faction_name: string | null; item_name: string;
   historical_price: number; history_30: number; history_15: number; history_7: number; history_3: number; history_1: number;
   daily_volume: number; buy_price: number; sell_price: number; material_total: number;
@@ -19,6 +19,7 @@ type DailyVolumePoint = { trade_date: string; volume: number };
 type ImplantSetRow = { corporation_id: number; offer_id: number; type_id: number; blueprint_type_id: number; is_blueprint: number; name_en: string; name_zh: string | null; buy_price: number; sell_price: number; expected_price: number; lp_cost: number; isk_cost: number; material_cost: number };
 const finiteNumber = (value: string | null, fallback: number) => value === null || value.trim() === "" ? fallback : Number(value);
 const visibleCorporation = visibleCorporationSql("c");
+const visibleOffer = visibleOfferSql("o");
 const HISTORY_WINDOWS = [30, 15, 7, 3, 1] as const;
 const emptyHistory = (): HistoryPrices => ({ 30: 0, 15: 0, 7: 0, 3: 0, 1: 0 });
 const chinaDate = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -72,7 +73,7 @@ export async function GET(request: Request) {
   const cutoff = historyCutoff(days, latestHistoryDate);
   const historyCutoffs = Object.fromEntries(HISTORY_WINDOWS.map(window => [window, historyCutoff(window, latestHistoryDate)])) as Record<(typeof HISTORY_WINDOWS)[number], string>;
   const filters: number[] = [];
-  const conditions: string[] = [];
+  const conditions: string[] = [visibleOffer];
   if (factionId) { conditions.push("c.faction_id = ?"); filters.push(factionId); }
   if (corporationId) { conditions.push("o.corporation_id = ?"); filters.push(corporationId); }
   if (!includeBoosterBlueprints) conditions.push(`NOT (br.blueprint_type_id IS NOT NULL AND (
@@ -104,7 +105,7 @@ export async function GET(request: Request) {
       FROM blueprint_materials bm LEFT JOIN market_orders mo ON mo.region_id = ${MARKET_REGION_ID} AND mo.type_id = bm.material_type_id
       GROUP BY bm.blueprint_type_id
     ), calculated AS (
-      SELECT o.corporation_id, o.offer_id, o.type_id, o.quantity, o.lp_cost, o.isk_cost,
+      SELECT o.corporation_id, o.offer_id, o.type_id, o.quantity, o.lp_cost, o.isk_cost, o.ak_cost,
         c.name corporation_name, c.faction_id, f.name faction_name,
         COALESCE(t.name_zh, t.name_en, '物品 ' || o.type_id) item_name,
         COALESCE(r.historical_price, 0) historical_price,
@@ -261,7 +262,7 @@ export async function GET(request: Request) {
     const sortColumn = sortColumns[sortKey] || "lp_ratio";
     const offers = (await db.prepare(`SELECT * FROM (${baseSql}) ranked ORDER BY ${sortColumn} ${sortDirection} NULLS LAST, item_name, offer_id LIMIT ? OFFSET ?`).bind(...bindings, pageSize, (page - 1) * pageSize).all<OfferRow>()).results;
     const materials = await loadMaterials(offers);
-    const implantRows = (await db.prepare(`SELECT o.corporation_id, o.offer_id, COALESCE(pt.type_id, t.type_id) type_id, t.type_id blueprint_type_id, CASE WHEN br.blueprint_type_id IS NULL THEN 0 ELSE 1 END is_blueprint, COALESCE(pt.name_en, t.name_en, '') name_en, COALESCE(pt.name_zh, t.name_zh) name_zh, o.lp_cost, o.isk_cost, COALESCE(mo.buy_price, 0) buy_price, COALESCE(mo.sell_price, 0) sell_price, COALESCE((SELECT SUM(md.average_price * md.volume) / NULLIF(SUM(md.volume), 0) FROM market_daily md WHERE md.region_id=? AND md.type_id=COALESCE(pt.type_id, t.type_id) AND md.trade_date>=?), 0) expected_price, COALESCE((SELECT SUM(m.quantity * COALESCE(mo2.sell_price, 0)) FROM lp_offer_materials m LEFT JOIN market_orders mo2 ON mo2.region_id=? AND mo2.type_id=m.type_id WHERE m.corporation_id=o.corporation_id AND m.offer_id=o.offer_id), 0) + COALESCE((SELECT SUM(bm.quantity * COALESCE(mo3.sell_price, 0)) FROM blueprint_materials bm LEFT JOIN market_orders mo3 ON mo3.region_id=? AND mo3.type_id=bm.material_type_id WHERE bm.blueprint_type_id=br.blueprint_type_id), 0) material_cost FROM lp_offers o JOIN item_types t ON t.type_id=o.type_id LEFT JOIN blueprint_recipes br ON br.blueprint_type_id=o.type_id LEFT JOIN item_types pt ON pt.type_id=br.product_type_id LEFT JOIN market_orders mo ON mo.region_id=? AND mo.type_id=COALESCE(br.product_type_id, t.type_id) WHERE o.corporation_id=? AND (COALESCE(pt.name_en, t.name_en) LIKE '% Alpha' OR COALESCE(pt.name_en, t.name_en) LIKE '% Beta' OR COALESCE(pt.name_en, t.name_en) LIKE '% Gamma' OR COALESCE(pt.name_en, t.name_en) LIKE '% Delta' OR COALESCE(pt.name_en, t.name_en) LIKE '% Epsilon' OR COALESCE(pt.name_en, t.name_en) LIKE '% Omega')`).bind(MARKET_REGION_ID, cutoff, MARKET_REGION_ID, MARKET_REGION_ID, MARKET_REGION_ID, corporationId).all<ImplantSetRow>()).results;
+    const implantRows = (await db.prepare(`SELECT o.corporation_id, o.offer_id, COALESCE(pt.type_id, t.type_id) type_id, t.type_id blueprint_type_id, CASE WHEN br.blueprint_type_id IS NULL THEN 0 ELSE 1 END is_blueprint, COALESCE(pt.name_en, t.name_en, '') name_en, COALESCE(pt.name_zh, t.name_zh) name_zh, o.lp_cost, o.isk_cost, COALESCE(mo.buy_price, 0) buy_price, COALESCE(mo.sell_price, 0) sell_price, COALESCE((SELECT SUM(md.average_price * md.volume) / NULLIF(SUM(md.volume), 0) FROM market_daily md WHERE md.region_id=? AND md.type_id=COALESCE(pt.type_id, t.type_id) AND md.trade_date>=?), 0) expected_price, COALESCE((SELECT SUM(m.quantity * COALESCE(mo2.sell_price, 0)) FROM lp_offer_materials m LEFT JOIN market_orders mo2 ON mo2.region_id=? AND mo2.type_id=m.type_id WHERE m.corporation_id=o.corporation_id AND m.offer_id=o.offer_id), 0) + COALESCE((SELECT SUM(bm.quantity * COALESCE(mo3.sell_price, 0)) FROM blueprint_materials bm LEFT JOIN market_orders mo3 ON mo3.region_id=? AND mo3.type_id=bm.material_type_id WHERE bm.blueprint_type_id=br.blueprint_type_id), 0) material_cost FROM lp_offers o JOIN item_types t ON t.type_id=o.type_id LEFT JOIN blueprint_recipes br ON br.blueprint_type_id=o.type_id LEFT JOIN item_types pt ON pt.type_id=br.product_type_id LEFT JOIN market_orders mo ON mo.region_id=? AND mo.type_id=COALESCE(br.product_type_id, t.type_id) WHERE o.corporation_id=? AND COALESCE(o.ak_cost,0)=0 AND (COALESCE(pt.name_en, t.name_en) LIKE '% Alpha' OR COALESCE(pt.name_en, t.name_en) LIKE '% Beta' OR COALESCE(pt.name_en, t.name_en) LIKE '% Gamma' OR COALESCE(pt.name_en, t.name_en) LIKE '% Delta' OR COALESCE(pt.name_en, t.name_en) LIKE '% Epsilon' OR COALESCE(pt.name_en, t.name_en) LIKE '% Omega')`).bind(MARKET_REGION_ID, cutoff, MARKET_REGION_ID, MARKET_REGION_ID, MARKET_REGION_ID, corporationId).all<ImplantSetRow>()).results;
     const implantMaterials = await loadMaterials(implantRows as unknown as OfferRow[]);
     const levels = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Omega"];
     const grouped = new Map<string, Map<string, ImplantSetRow>>();
@@ -289,8 +290,10 @@ export async function GET(request: Request) {
   }
 
   const snapshots = (await db.prepare("SELECT list_kind, rank, snapshot_date, calculated_at, payload FROM ranking_snapshots WHERE rank <= 100 ORDER BY list_kind, rank").all<{ list_kind: string; rank: number; snapshot_date: string; calculated_at: string; payload: string }>()).results;
+  const akOfferRows = (await db.prepare("SELECT corporation_id, offer_id FROM lp_offers WHERE COALESCE(ak_cost,0)>0").all<{ corporation_id: number; offer_id: number }>()).results;
+  const akOfferKeys = new Set(akOfferRows.map(offer => `${offer.corporation_id}:${offer.offer_id}`));
   const isBoosterBlueprint = (offer: OfferRow) => Boolean(offer.is_blueprint) && /增效体|增效剂|booster/i.test(`${offer.item_name || ""} ${offer.product_name || ""}`);
-  const parse = (kind: string) => snapshots.filter(row => row.list_kind === kind).map(row => JSON.parse(row.payload) as OfferRow & { materials?: MaterialRow[] }).filter(offer => !isGloballyExcludedCorporation(offer.corporation_id, offer.faction_id)).filter(offer => includeBoosterBlueprints || !isBoosterBlueprint(offer)).slice(0, 100);
+  const parse = (kind: string) => snapshots.filter(row => row.list_kind === kind).map(row => JSON.parse(row.payload) as OfferRow & { materials?: MaterialRow[] }).filter(offer => !isGloballyExcludedCorporation(offer.corporation_id, offer.faction_id) && !akOfferKeys.has(`${offer.corporation_id}:${offer.offer_id}`)).filter(offer => includeBoosterBlueprints || !isBoosterBlueprint(offer)).slice(0, 100);
   const hydrateSnapshot = async (offers: (OfferRow & { materials?: MaterialRow[] })[]) => {
     const materialMap = new Map<string, MaterialRow[]>();
     for (const offer of offers) materialMap.set(`${offer.corporation_id}:${offer.offer_id}`, offer.materials ?? []);

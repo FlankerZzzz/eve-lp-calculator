@@ -14,7 +14,12 @@ const port = portIndex >= 0 ? args[portIndex + 1] : "3000";
 const vinext = path.resolve("node_modules", "vinext", "dist", "cli.js");
 const sqlitePath = process.env.SQLITE_PATH || path.resolve(".data", "eve-lp.db");
 const workerHostname = hostname === "0.0.0.0" || hostname === "::" ? "127.0.0.1" : hostname;
-const devEnv = { ...process.env, SQLITE_RUNTIME: process.env.SQLITE_RUNTIME || "1", SQLITE_PATH: sqlitePath };
+const devEnv = {
+  ...process.env,
+  SQLITE_RUNTIME: process.env.SQLITE_RUNTIME || "1",
+  SQLITE_PATH: sqlitePath,
+  SYNC_INTERNAL_TOKEN: process.env.SYNC_INTERNAL_TOKEN || "eve-lp-dev-sync-v1",
+};
 
 mkdirSync(path.dirname(sqlitePath), { recursive: true });
 

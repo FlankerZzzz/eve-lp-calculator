@@ -42,6 +42,26 @@ export const lpOfferMaterials = sqliteTable("lp_offer_materials", {
   quantity: integer("quantity").notNull(),
 }, table => [primaryKey({ columns: [table.corporationId, table.offerId, table.typeId] })]);
 
+export const lpOfferStaging = sqliteTable("lp_offer_staging", {
+  generationId: text("generation_id").notNull(),
+  corporationId: integer("corporation_id").notNull(),
+  offerId: integer("offer_id").notNull(),
+  typeId: integer("type_id").notNull(),
+  quantity: integer("quantity").notNull(),
+  lpCost: integer("lp_cost").notNull(),
+  iskCost: real("isk_cost").notNull(),
+  akCost: integer("ak_cost").notNull().default(0),
+  updatedAt: text("updated_at").notNull(),
+}, table => [primaryKey({ columns: [table.generationId, table.corporationId, table.offerId] })]);
+
+export const lpOfferMaterialStaging = sqliteTable("lp_offer_material_staging", {
+  generationId: text("generation_id").notNull(),
+  corporationId: integer("corporation_id").notNull(),
+  offerId: integer("offer_id").notNull(),
+  typeId: integer("type_id").notNull(),
+  quantity: integer("quantity").notNull(),
+}, table => [primaryKey({ columns: [table.generationId, table.corporationId, table.offerId, table.typeId] })]);
+
 export const blueprintRecipes = sqliteTable("blueprint_recipes", {
   blueprintTypeId: integer("blueprint_type_id").primaryKey(),
   productTypeId: integer("product_type_id").notNull(),
@@ -59,6 +79,21 @@ export const blueprintChecks = sqliteTable("blueprint_checks", {
   typeId: integer("type_id").primaryKey(),
   checkedAt: text("checked_at").notNull(),
 });
+
+export const blueprintRecipeStaging = sqliteTable("blueprint_recipe_staging", {
+  generationId: text("generation_id").notNull(),
+  blueprintTypeId: integer("blueprint_type_id").notNull(),
+  productTypeId: integer("product_type_id").notNull(),
+  productQuantity: integer("product_quantity").notNull(),
+  checkedAt: text("checked_at").notNull(),
+}, table => [primaryKey({ columns: [table.generationId, table.blueprintTypeId] })]);
+
+export const blueprintMaterialStaging = sqliteTable("blueprint_material_staging", {
+  generationId: text("generation_id").notNull(),
+  blueprintTypeId: integer("blueprint_type_id").notNull(),
+  materialTypeId: integer("material_type_id").notNull(),
+  quantity: integer("quantity").notNull(),
+}, table => [primaryKey({ columns: [table.generationId, table.blueprintTypeId, table.materialTypeId] })]);
 
 export const marketDaily = sqliteTable("market_daily", {
   regionId: integer("region_id").notNull(),

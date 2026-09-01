@@ -23,10 +23,22 @@ export function isGloballyExcludedCorporation(corporationId: number, factionId: 
   return HIDDEN_CORPORATION_ID_SET.has(corporationId) || (factionId !== null && factionId !== undefined && HIDDEN_FACTION_ID_SET.has(factionId));
 }
 
+export function isGloballyExcludedOffer(corporationId: number, factionId: number | null | undefined, akCost: number | null | undefined) {
+  return isGloballyExcludedCorporation(corporationId, factionId) || Number(akCost || 0) > 0;
+}
+
 export function visibleCorporationSql(alias = "c") {
   return `(${alias}.faction_id IS NULL OR ${alias}.faction_id NOT IN (${HIDDEN_FACTION_SQL})) AND ${alias}.corporation_id NOT IN (${HIDDEN_CORPORATION_SQL})`;
 }
 
 export function excludedCorporationSql(alias = "c") {
   return `(${alias}.faction_id IN (${HIDDEN_FACTION_SQL}) OR ${alias}.corporation_id IN (${HIDDEN_CORPORATION_SQL}))`;
+}
+
+export function visibleOfferSql(alias = "o") {
+  return `COALESCE(${alias}.ak_cost, 0) = 0`;
+}
+
+export function excludedOfferSql(alias = "o") {
+  return `COALESCE(${alias}.ak_cost, 0) > 0`;
 }

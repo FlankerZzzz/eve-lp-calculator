@@ -2,6 +2,8 @@ import net from "node:net";
 import { pathToFileURL } from "node:url";
 
 const baseUrl = process.env.SYNC_BASE_URL || "http://localhost:3000";
+const syncInternalToken = process.env.SYNC_INTERNAL_TOKEN || "";
+const syncJsonHeaders = { "content-type": "application/json", "x-sync-internal-token": syncInternalToken };
 const idleDelay = 1000;
 const batchDelay = 500;
 const lockPort = 33991;
@@ -43,7 +45,7 @@ async function resumeAfterTransientFailure(job, status) {
   if (latest?.status === "running") return true;
   const response = await fetch(`${baseUrl}/api/sync/control`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: syncJsonHeaders,
     body: JSON.stringify({ kind: job.kind, action: "start" }),
   });
   return response.ok;
@@ -93,7 +95,7 @@ async function scheduleDueJobs(data) {
   if (key === lastScheduleKey || Date.now() - lastScheduleAttemptAt < 60000) return false;
   lastScheduleAttemptAt = Date.now();
   const response = await fetch(`${baseUrl}/api/sync/control`, {
-    method: "POST", headers: { "content-type": "application/json" },
+    method: "POST", headers: syncJsonHeaders,
     body: JSON.stringify({ kind, action: "restart" }),
   });
   if (response.ok) {
@@ -114,7 +116,7 @@ async function nextRunningJob() {
     lastRankingDueCheck = Date.now();
     const due = await fetch(`${baseUrl}/api/sync/rankings`, { cache: "no-store" }).then(response => response.ok ? response.json() : null).catch(() => null);
     if (due?.due) {
-      await fetch(`${baseUrl}/api/sync/control`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "rankings", action: "start" }) });
+      await fetch(`${baseUrl}/api/sync/control`, { method: "POST", headers: syncJsonHeaders, body: JSON.stringify({ kind: "rankings", action: "start" }) });
       return nextRunningJob();
     }
   }
@@ -173,14 +175,15 @@ async function rebuildRankings(job) {
     retainTop(popular, offers.filter(offer => offer.daily_volume > 0), (a, b) => b.daily_volume - a.daily_volume);
     retainTop(highRatio, offers.filter(offer => offer.lp_ratio > 0), (a, b) => b.lp_ratio - a.lp_ratio);
     processed += chunk.length;
-    await fetch(`${baseUrl}/api/sync/rankings`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "progress", runStartedAt: job.run_started_at, processed: chunk.length, remaining: corporations.length - processed }) });
+    await fetch(`${baseUrl}/api/sync/rankings`, { method: "POST", headers: syncJsonHeaders, body: JSON.stringify({ action: "progress", runStartedAt: job.run_started_at, processed: chunk.length, remaining: corporations.length - processed }) });
   }
-  const response = await fetch(`${baseUrl}/api/sync/rankings`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "complete", runStartedAt: job.run_started_at, popular: [...popular.values()].sort((a, b) => b.daily_volume - a.daily_volume).slice(0, 100), highRatio: [...highRatio.values()].sort((a, b) => b.lp_ratio - a.lp_ratio).slice(0, 100) }) });
+  const response = await fetch(`${baseUrl}/api/sync/rankings`, { method: "POST", headers: syncJsonHeaders, body: JSON.stringify({ action: "complete", runStartedAt: job.run_started_at, popular: [...popular.values()].sort((a, b) => b.daily_volume - a.daily_volume).slice(0, 100), highRatio: [...highRatio.values()].sort((a, b) => b.lp_ratio - a.lp_ratio).slice(0, 100) }) });
   if (!response.ok) throw new Error(`保存榜单 HTTP ${response.status}`);
 }
 
 export async function runSyncWorker() {
   await acquireSingleInstanceLock();
+  if (!syncInternalToken) throw new Error("SYNC_INTERNAL_TOKEN 未配置，后台同步器拒绝启动");
   console.log(`[sync-worker] 等待本地服务 ${baseUrl}`);
   while (true) {
     try {
@@ -199,7 +202,7 @@ export async function runSyncWorker() {
       }
       const response = await fetch(`${baseUrl}/api/sync/${job.kind}`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: syncJsonHeaders,
         body: JSON.stringify({ runStartedAt: job.run_started_at }),
       });
       const text = await response.text();

@@ -1,5 +1,6 @@
 import { ensureSchema } from "../../../../db/d1";
 import { updateSyncJob } from "../../../../db/sync-state";
+import { authorizeInternalSync } from "../../../../lib/sync-auth";
 import { isGloballyExcludedCorporation } from "../../../../lib/data-policy";
 
 const RANKING_HOURS = [9, 15, 18, 21];
@@ -26,6 +27,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const unauthorized = authorizeInternalSync(request);
+  if (unauthorized) return unauthorized;
   const body = await request.json().catch(() => ({})) as { action?: string; runStartedAt?: string; processed?: number; remaining?: number; popular?: unknown[]; highRatio?: unknown[] };
   const db = await ensureSchema();
   const job = await db.prepare("SELECT status, run_started_at FROM sync_jobs WHERE kind='rankings'").first<{ status: string; run_started_at: string | null }>();
@@ -37,12 +40,15 @@ export async function POST(request: Request) {
   if (body.action !== "complete" || !Array.isArray(body.popular) || !Array.isArray(body.highRatio)) return Response.json({ error: "无效操作" }, { status: 400 });
   const now = new Date().toISOString();
   const date = chinaDate();
+  const akRows = (await db.prepare("SELECT corporation_id, offer_id FROM lp_offers WHERE COALESCE(ak_cost,0)>0").all<{ corporation_id: number; offer_id: number }>()).results;
+  const akOfferKeys = new Set(akRows.map(offer => `${offer.corporation_id}:${offer.offer_id}`));
   const statements = [db.prepare("DELETE FROM ranking_snapshots")];
   const savedCounts = { popular: 0, highRatio: 0 };
   for (const [kind, rows] of [["popular", body.popular], ["highRatio", body.highRatio]] as const) {
     const visibleRows = rows.filter(row => {
-      const offer = row as { corporation_id?: unknown; faction_id?: unknown };
-      return !isGloballyExcludedCorporation(Number(offer?.corporation_id), offer?.faction_id === null ? null : Number(offer?.faction_id));
+      const offer = row as { corporation_id?: unknown; offer_id?: unknown; faction_id?: unknown };
+      return !isGloballyExcludedCorporation(Number(offer?.corporation_id), offer?.faction_id === null ? null : Number(offer?.faction_id))
+        && !akOfferKeys.has(`${Number(offer?.corporation_id)}:${Number(offer?.offer_id)}`);
     }).slice(0, 100);
     savedCounts[kind] = visibleRows.length;
     visibleRows.forEach((row, index) => statements.push(db.prepare("INSERT INTO ranking_snapshots (list_kind, rank, snapshot_date, calculated_at, payload) VALUES (?, ?, ?, ?, ?)").bind(kind, index + 1, date, now, JSON.stringify(row))));

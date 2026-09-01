@@ -1,5 +1,6 @@
 import { ensureSchema } from "../../../../db/d1";
 import { updateSyncJob } from "../../../../db/sync-state";
+import { authorizeSyncControl } from "../../../../lib/sync-auth";
 
 type SyncKind = "catalog" | "history" | "orders" | "rankings";
 
@@ -7,6 +8,8 @@ const kinds = new Set<SyncKind>(["catalog", "history", "orders", "rankings"]);
 const actions = new Set(["start", "pause", "restart"]);
 
 export async function POST(request: Request) {
+  const unauthorized = authorizeSyncControl(request);
+  if (unauthorized) return unauthorized;
   const body = await request.json().catch(() => ({})) as { kind?: SyncKind; action?: "start" | "pause" | "restart" };
   if (!body.kind || !kinds.has(body.kind) || !body.action || !actions.has(body.action)) {
     return Response.json({ error: "无效的同步作业或操作" }, { status: 400 });

@@ -2,6 +2,7 @@ import { ensureSchema } from "../../../../db/d1";
 import { batchStatements, EsiError, esiGet, esiPost } from "../../../../lib/esi-server";
 import { updateSyncJob } from "../../../../db/sync-state";
 import { NPC_CORPORATION_FACTIONS } from "../../../../lib/npc-factions";
+import { authorizeInternalSync } from "../../../../lib/sync-auth";
 
 type Faction = { faction_id: number; name: string };
 type Corporation = { name: string; faction_id?: number };
@@ -24,12 +25,13 @@ async function rebuildImplantCatalog(db: D1Database, generationId: string, now: 
     FROM lp_offers o JOIN item_types t ON t.type_id=o.type_id
     LEFT JOIN blueprint_recipes br ON br.blueprint_type_id=o.type_id
     LEFT JOIN item_types pt ON pt.type_id=br.product_type_id
-    WHERE COALESCE(pt.name_en,t.name_en,'') LIKE '% Alpha'
+    WHERE COALESCE(o.ak_cost,0)=0 AND (
+      COALESCE(pt.name_en,t.name_en,'') LIKE '% Alpha'
        OR COALESCE(pt.name_en,t.name_en,'') LIKE '% Beta'
        OR COALESCE(pt.name_en,t.name_en,'') LIKE '% Gamma'
        OR COALESCE(pt.name_en,t.name_en,'') LIKE '% Delta'
        OR COALESCE(pt.name_en,t.name_en,'') LIKE '% Epsilon'
-       OR COALESCE(pt.name_en,t.name_en,'') LIKE '% Omega'`).all<ImplantCatalogRow>()).results;
+       OR COALESCE(pt.name_en,t.name_en,'') LIKE '% Omega')`).all<ImplantCatalogRow>()).results;
 
   const corporationSets = new Map<string, Map<string, ImplantCatalogRow>>();
   for (const row of rows) {
@@ -74,6 +76,8 @@ async function fetchBlueprint(typeId: number) {
 }
 
 export async function POST(request: Request) {
+  const unauthorized = authorizeInternalSync(request);
+  if (unauthorized) return unauthorized;
   const db = await ensureSchema();
   const now = new Date().toISOString();
   const body = await request.json().catch(() => ({})) as { runStartedAt?: string };
@@ -128,20 +132,29 @@ export async function POST(request: Request) {
         return { corporationId, corporation: await corporationPromise, offers };
       }));
       for (const { corporationId, corporation, offers } of corporationData) {
-        const statements: D1PreparedStatement[] = [
-          db.prepare("UPDATE corporations SET faction_id=?, offers_synced_at=?, updated_at=? WHERE corporation_id=?").bind(NPC_CORPORATION_FACTIONS[corporationId] ?? corporation.faction_id ?? null, now, now, corporationId),
-          db.prepare("DELETE FROM lp_offer_materials WHERE corporation_id=?").bind(corporationId),
-          db.prepare("DELETE FROM lp_offers WHERE corporation_id=?").bind(corporationId),
-        ];
+        await db.batch([
+          db.prepare("DELETE FROM lp_offer_material_staging WHERE corporation_id=?").bind(corporationId),
+          db.prepare("DELETE FROM lp_offer_staging WHERE corporation_id=?").bind(corporationId),
+        ]);
+        const statements: D1PreparedStatement[] = [];
         for (const offer of offers) {
-          statements.push(db.prepare("INSERT INTO lp_offers (corporation_id, offer_id, type_id, quantity, lp_cost, isk_cost, ak_cost, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").bind(corporationId, offer.offer_id, offer.type_id, offer.quantity, offer.lp_cost, offer.isk_cost, offer.ak_cost ?? 0, now));
+          statements.push(db.prepare("INSERT INTO lp_offer_staging (generation_id, corporation_id, offer_id, type_id, quantity, lp_cost, isk_cost, ak_cost, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(runStartedAt, corporationId, offer.offer_id, offer.type_id, offer.quantity, offer.lp_cost, offer.isk_cost, offer.ak_cost ?? 0, now));
           statements.push(db.prepare("INSERT OR IGNORE INTO item_types (type_id, updated_at) VALUES (?, ?)").bind(offer.type_id, now));
           for (const material of offer.required_items ?? []) {
-            statements.push(db.prepare("INSERT INTO lp_offer_materials (corporation_id, offer_id, type_id, quantity) VALUES (?, ?, ?, ?)").bind(corporationId, offer.offer_id, material.type_id, material.quantity));
+            statements.push(db.prepare("INSERT INTO lp_offer_material_staging (generation_id, corporation_id, offer_id, type_id, quantity) VALUES (?, ?, ?, ?, ?)").bind(runStartedAt, corporationId, offer.offer_id, material.type_id, material.quantity));
             statements.push(db.prepare("INSERT OR IGNORE INTO item_types (type_id, updated_at) VALUES (?, ?)").bind(material.type_id, now));
           }
         }
         await batchStatements(db, statements);
+        await db.batch([
+          db.prepare("DELETE FROM lp_offer_materials WHERE corporation_id=?").bind(corporationId),
+          db.prepare("DELETE FROM lp_offers WHERE corporation_id=?").bind(corporationId),
+          db.prepare("INSERT INTO lp_offers (corporation_id, offer_id, type_id, quantity, lp_cost, isk_cost, ak_cost, updated_at) SELECT corporation_id, offer_id, type_id, quantity, lp_cost, isk_cost, ak_cost, updated_at FROM lp_offer_staging WHERE generation_id=? AND corporation_id=?").bind(runStartedAt, corporationId),
+          db.prepare("INSERT INTO lp_offer_materials (corporation_id, offer_id, type_id, quantity) SELECT corporation_id, offer_id, type_id, quantity FROM lp_offer_material_staging WHERE generation_id=? AND corporation_id=?").bind(runStartedAt, corporationId),
+          db.prepare("UPDATE corporations SET faction_id=?, offers_synced_at=?, updated_at=? WHERE corporation_id=?").bind(NPC_CORPORATION_FACTIONS[corporationId] ?? corporation.faction_id ?? null, now, now, corporationId),
+          db.prepare("DELETE FROM lp_offer_material_staging WHERE generation_id=? AND corporation_id=?").bind(runStartedAt, corporationId),
+          db.prepare("DELETE FROM lp_offer_staging WHERE generation_id=? AND corporation_id=?").bind(runStartedAt, corporationId),
+        ]);
       }
       const remaining = await db.prepare("SELECT COUNT(*) AS count FROM corporations WHERE offers_synced_at IS NULL OR offers_synced_at < ?").bind(runStartedAt).first<{ count: number }>();
       const result = { done: false, phase: "corporations", processed: pendingCorporations.length, remaining: remaining?.count ?? 0 };
@@ -176,20 +189,29 @@ export async function POST(request: Request) {
         const manufacturing = blueprint?.activities?.manufacturing;
         const product = Object.values(manufacturing?.products ?? {})[0];
         const materials = Object.values(manufacturing?.materials ?? {});
-        const statements: D1PreparedStatement[] = [
-          db.prepare("INSERT OR REPLACE INTO blueprint_checks (type_id, checked_at) VALUES (?, ?)").bind(row.type_id, now),
-          db.prepare("DELETE FROM blueprint_materials WHERE blueprint_type_id=?").bind(row.type_id),
-          db.prepare("DELETE FROM blueprint_recipes WHERE blueprint_type_id=?").bind(row.type_id),
-        ];
+        await db.batch([
+          db.prepare("DELETE FROM blueprint_material_staging WHERE blueprint_type_id=?").bind(row.type_id),
+          db.prepare("DELETE FROM blueprint_recipe_staging WHERE blueprint_type_id=?").bind(row.type_id),
+        ]);
+        const statements: D1PreparedStatement[] = [];
         if (product?.type_id && product.quantity) {
-          statements.push(db.prepare("INSERT INTO blueprint_recipes (blueprint_type_id, product_type_id, product_quantity, checked_at) VALUES (?, ?, ?, ?)").bind(row.type_id, product.type_id, product.quantity, now));
+          statements.push(db.prepare("INSERT INTO blueprint_recipe_staging (generation_id, blueprint_type_id, product_type_id, product_quantity, checked_at) VALUES (?, ?, ?, ?, ?)").bind(runStartedAt, row.type_id, product.type_id, product.quantity, now));
           statements.push(db.prepare("INSERT OR IGNORE INTO item_types (type_id, updated_at) VALUES (?, ?)").bind(product.type_id, now));
           for (const material of materials) if (material.type_id && material.quantity) {
-            statements.push(db.prepare("INSERT INTO blueprint_materials (blueprint_type_id, material_type_id, quantity) VALUES (?, ?, ?)").bind(row.type_id, material.type_id, material.quantity));
+            statements.push(db.prepare("INSERT INTO blueprint_material_staging (generation_id, blueprint_type_id, material_type_id, quantity) VALUES (?, ?, ?, ?)").bind(runStartedAt, row.type_id, material.type_id, material.quantity));
             statements.push(db.prepare("INSERT OR IGNORE INTO item_types (type_id, updated_at) VALUES (?, ?)").bind(material.type_id, now));
           }
         }
         await batchStatements(db, statements);
+        await db.batch([
+          db.prepare("DELETE FROM blueprint_materials WHERE blueprint_type_id=?").bind(row.type_id),
+          db.prepare("DELETE FROM blueprint_recipes WHERE blueprint_type_id=?").bind(row.type_id),
+          db.prepare("INSERT INTO blueprint_recipes (blueprint_type_id, product_type_id, product_quantity, checked_at) SELECT blueprint_type_id, product_type_id, product_quantity, checked_at FROM blueprint_recipe_staging WHERE generation_id=? AND blueprint_type_id=?").bind(runStartedAt, row.type_id),
+          db.prepare("INSERT INTO blueprint_materials (blueprint_type_id, material_type_id, quantity) SELECT blueprint_type_id, material_type_id, quantity FROM blueprint_material_staging WHERE generation_id=? AND blueprint_type_id=?").bind(runStartedAt, row.type_id),
+          db.prepare("INSERT OR REPLACE INTO blueprint_checks (type_id, checked_at) VALUES (?, ?)").bind(row.type_id, now),
+          db.prepare("DELETE FROM blueprint_material_staging WHERE generation_id=? AND blueprint_type_id=?").bind(runStartedAt, row.type_id),
+          db.prepare("DELETE FROM blueprint_recipe_staging WHERE generation_id=? AND blueprint_type_id=?").bind(runStartedAt, row.type_id),
+        ]);
       }
       const remaining = await db.prepare(`SELECT COUNT(DISTINCT o.type_id) AS count FROM lp_offers o LEFT JOIN blueprint_checks b ON b.type_id=o.type_id WHERE b.type_id IS NULL OR b.checked_at < ?`).bind(runStartedAt).first<{ count: number }>();
       const result = { done: false, phase: "blueprints", processed: pendingBlueprints.length, remaining: remaining?.count ?? 0 };

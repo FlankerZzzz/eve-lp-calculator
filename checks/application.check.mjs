@@ -131,7 +131,7 @@ check("四个涂装兑换军团在展示、榜单和市场同步中永久排除"
   assert.match(rankings, /!isGloballyExcludedCorporation\(Number\(offer\?\.corporation_id\)/);
   assert.match(history, /visibleCorporationSql/);
   assert.match(orders, /visibleCorporationSql/);
-  assert.match(status, /invalidItemCte[\s\S]*has_invalid_source[\s\S]*has_visible_source/);
+  assert.match(status, /invalidItemCte[\s\S]*has_invalid_entity_source[\s\S]*has_visible_source/);
   assert.match(syncPage, /显示无效数据/);
   assert.match(syncPage, /排除势力与军团/);
   assert.match(syncPage, /永久跳过市场查询的物品/);
@@ -143,13 +143,15 @@ check("组合优化同时排除材料和产出订单深度不足的方案", asyn
 });
 
 check("军团收藏夹仅保存在浏览器本地并支持切换与取消", async () => {
-  const page = await source("app/page.tsx");
+  const [page, css] = await Promise.all([source("app/page.tsx"), source("app/globals.css")]);
   assert.match(page, /FAVORITE_CORPORATIONS_STORAGE_KEY/);
   assert.match(page, /window\.localStorage\.setItem\(FAVORITE_CORPORATIONS_STORAGE_KEY/);
   assert.match(page, /selectedCorporationIsFavorite \? "取消收藏" : "添加到收藏夹"/);
   assert.match(page, /openFavoriteCorporation/);
   assert.match(page, /setCorporationId\(0\)/);
   assert.doesNotMatch(page, /fetch\([^\n]*favorite/i);
+  assert.match(css, /\.favorite-cards\{[^}]*flex-wrap:wrap[^}]*height:94px[^}]*overflow-x:hidden;overflow-y:auto/);
+  assert.match(css, /\.favorite-cards>div\{[^}]*width:max-content[^}]*height:44px/);
 });
 
 check("企业选择器点击外部收起且不再显示当前结果搜索框", async () => {
@@ -393,4 +395,49 @@ check("合同地点使用国服吉他四卫星四名称", async () => {
   const [route, daemon] = await Promise.all([source("app/api/data/contracts/route.ts"), source("scripts/contract-sync-daemon.mjs")]);
   assert.match(route, /吉他 4 - 卫星 4 - 加达里海军组装车间/);
   assert.match(daemon, /吉他 4 - 卫星 4 - 加达里海军组装车间/);
+});
+
+check("AK 兑换来源由统一无效数据策略排除并保留共享物品", async () => {
+  const [policy, options, offers, history, orders, status, catalog] = await Promise.all([
+    source("lib/data-policy.ts"), source("app/api/data/options/route.ts"), source("app/api/data/offers/route.ts"),
+    source("app/api/sync/history/route.ts"), source("scripts/order-sync-daemon.mjs"), source("app/api/sync/status/route.ts"),
+    source("app/api/sync/catalog/route.ts"),
+  ]);
+  assert.match(policy, /visibleOfferSql/);
+  assert.match(policy, /COALESCE\(\$\{alias\}\.ak_cost, 0\) = 0/);
+  assert.match(options, /visibleOfferSql/);
+  assert.match(offers, /const conditions: string\[\] = \[visibleOffer\]/);
+  assert.match(offers, /akOfferKeys/);
+  assert.match(history, /visibleOfferSql/);
+  assert.match(orders, /visibleOfferSql/);
+  assert.match(status, /has_ak_source/);
+  assert.match(status, /Analysis Kredits（AK）/);
+  assert.match(catalog, /COALESCE\(o\.ak_cost,0\)=0/);
+});
+
+check("目录和蓝图通过暂存表原子发布", async () => {
+  const [catalog, schema] = await Promise.all([source("app/api/sync/catalog/route.ts"), source("db/d1.ts")]);
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS lp_offer_staging/);
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS blueprint_recipe_staging/);
+  assert.match(catalog, /INSERT INTO lp_offer_staging/);
+  assert.match(catalog, /INSERT INTO lp_offers[\s\S]*SELECT corporation_id, offer_id[\s\S]*FROM lp_offer_staging/);
+  assert.match(catalog, /UPDATE corporations SET faction_id=\?, offers_synced_at/);
+  assert.match(catalog, /INSERT INTO blueprint_recipe_staging/);
+  assert.match(catalog, /INSERT OR REPLACE INTO blueprint_checks/);
+});
+
+check("前端取消过期请求并提示合同缓存已过期", async () => {
+  const [page, css] = await Promise.all([source("app/page.tsx"), source("app/globals.css")]);
+  assert.match(page, /loadOffers\(controller\.signal\)/);
+  assert.match(page, /return \(\) => controller\.abort\(\)/);
+  assert.match(page, /market-orders[\s\S]*signal: controller\.signal/);
+  assert.match(page, /合同缓存已过期，以下为上次成功数据/);
+  assert.match(css, /contract-stale-warning/);
+});
+
+check("只保留当前渲染的脑插面板实现", async () => {
+  const page = await source("app/page.tsx");
+  assert.match(page, /riskAwareImplantSetPanel/);
+  assert.match(page, /lpOnlyImplantExchangePanel/);
+  assert.doesNotMatch(page, /enhancedImplantSetPanel|finalImplantSetPanel|const implantExchangePanel/);
 });

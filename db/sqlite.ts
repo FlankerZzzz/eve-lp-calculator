@@ -17,7 +17,8 @@ function db() {
 
 class Statement {
   private values: unknown[] = [];
-  constructor(private readonly sql: string) {}
+  private readonly sql: string;
+  constructor(sql: string) { this.sql = sql; }
   bind(...values: unknown[]) { this.values = values; return this; }
   async first<T = Record<string, unknown>>() { return (db().prepare(this.sql).get(...this.values as never[]) as T | undefined) ?? null; }
   async all<T = Record<string, unknown>>() { return { results: db().prepare(this.sql).all(...this.values as never[]) as T[], success: true }; }

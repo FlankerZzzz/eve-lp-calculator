@@ -7,6 +7,8 @@ import {
   HIDDEN_FACTIONS,
   HIDDEN_FACTION_SQL,
   isGloballyExcludedCorporation,
+  isGloballyExcludedOffer,
+  visibleOfferSql,
   visibleCorporationSql,
 } from "../lib/data-policy.ts";
 
@@ -20,7 +22,10 @@ test("全局无效实体登记包含稳定 ID、名称与原因且没有重复",
   assert.equal(isGloballyExcludedCorporation(2000001, 500013), true);
   assert.equal(isGloballyExcludedCorporation(2000001, 500003), false);
   assert.equal(isGloballyExcludedCorporation(2000001, null), false);
+  assert.equal(isGloballyExcludedOffer(2000001, 500003, 15000), true);
+  assert.equal(isGloballyExcludedOffer(2000001, 500003, 0), false);
   assert.match(visibleCorporationSql("corp"), /corp\.faction_id IS NULL/);
+  assert.match(visibleOfferSql("offer"), /offer\.ak_cost/);
 });
 
 test("只有排除来源引用的物品才无效，共享物品继续保留", () => {
@@ -28,7 +33,7 @@ test("只有排除来源引用的物品才无效，共享物品继续保留", ()
   db.exec(`
     CREATE TABLE corporations (corporation_id INTEGER PRIMARY KEY, faction_id INTEGER);
     CREATE TABLE item_types (type_id INTEGER PRIMARY KEY);
-    CREATE TABLE lp_offers (corporation_id INTEGER, offer_id INTEGER, type_id INTEGER);
+    CREATE TABLE lp_offers (corporation_id INTEGER, offer_id INTEGER, type_id INTEGER, ak_cost INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE lp_offer_materials (corporation_id INTEGER, offer_id INTEGER, type_id INTEGER);
     CREATE TABLE blueprint_recipes (blueprint_type_id INTEGER PRIMARY KEY, product_type_id INTEGER);
     CREATE TABLE blueprint_materials (blueprint_type_id INTEGER, material_type_id INTEGER);
@@ -37,25 +42,27 @@ test("只有排除来源引用的物品才无效，共享物品继续保留", ()
   insertCorporation.run(1000283, 500003);
   insertCorporation.run(2000001, 500003);
   insertCorporation.run(2000002, 500013);
-  for (let typeId = 1; typeId <= 7; typeId += 1) db.prepare("INSERT INTO item_types VALUES (?)").run(typeId);
+  for (let typeId = 1; typeId <= 9; typeId += 1) db.prepare("INSERT INTO item_types VALUES (?)").run(typeId);
 
   // 1：仅无效军团直接产出；2：无效军团与有效军团共享产出；7：仅有效军团产出。
-  db.prepare("INSERT INTO lp_offers VALUES (1000283, 1, 1), (1000283, 2, 2), (2000001, 3, 2), (2000001, 4, 7)").run();
+  db.prepare("INSERT INTO lp_offers VALUES (1000283, 1, 1, 0), (1000283, 2, 2, 0), (2000001, 3, 2, 0), (2000001, 4, 7, 0)").run();
   // 3：仅无效势力军团的兑换材料；4：无效与有效来源共享的兑换材料。
-  db.prepare("INSERT INTO lp_offers VALUES (2000002, 5, 99), (1000283, 6, 98), (2000001, 7, 97)").run();
+  db.prepare("INSERT INTO lp_offers VALUES (2000002, 5, 99, 0), (1000283, 6, 98, 0), (2000001, 7, 97, 0)").run();
   db.prepare("INSERT INTO lp_offer_materials VALUES (2000002, 5, 3), (1000283, 6, 4), (2000001, 7, 4)").run();
   // 5：仅无效来源的蓝图产品；6：仅无效来源的制造材料。
-  db.prepare("INSERT INTO lp_offers VALUES (1000283, 8, 50), (1000283, 9, 60)").run();
+  db.prepare("INSERT INTO lp_offers VALUES (1000283, 8, 50, 0), (1000283, 9, 60, 0)").run();
   db.prepare("INSERT INTO blueprint_recipes VALUES (50, 5), (60, 61)").run();
   db.prepare("INSERT INTO blueprint_materials VALUES (60, 6)").run();
+  // 8：仅 AK 兑换产出；9：AK 与普通 LP 兑换共享产出，应继续保留。
+  db.prepare("INSERT INTO lp_offers VALUES (2000001, 10, 8, 15000), (2000001, 11, 9, 15000), (2000001, 12, 9, 0)").run();
 
-  const visibleCorporation = `c.faction_id NOT IN (${HIDDEN_FACTION_SQL}) AND c.corporation_id NOT IN (${HIDDEN_CORPORATION_SQL})`;
-  const invalidCorporation = `(c.faction_id IN (${HIDDEN_FACTION_SQL}) OR c.corporation_id IN (${HIDDEN_CORPORATION_SQL}))`;
-  const associatedWith = corporationRule => `(EXISTS (SELECT 1 FROM lp_offers o JOIN corporations c ON c.corporation_id=o.corporation_id WHERE o.type_id=t.type_id AND ${corporationRule})
-    OR EXISTS (SELECT 1 FROM lp_offer_materials m JOIN corporations c ON c.corporation_id=m.corporation_id WHERE m.type_id=t.type_id AND ${corporationRule})
-    OR EXISTS (SELECT 1 FROM blueprint_recipes b JOIN lp_offers o ON o.type_id=b.blueprint_type_id JOIN corporations c ON c.corporation_id=o.corporation_id WHERE b.product_type_id=t.type_id AND ${corporationRule})
-    OR EXISTS (SELECT 1 FROM blueprint_materials bm JOIN lp_offers o ON o.type_id=bm.blueprint_type_id JOIN corporations c ON c.corporation_id=o.corporation_id WHERE bm.material_type_id=t.type_id AND ${corporationRule}))`;
-  const rows = db.prepare(`SELECT t.type_id FROM item_types t WHERE ${associatedWith(invalidCorporation)} AND NOT ${associatedWith(visibleCorporation)} ORDER BY t.type_id`).all();
-  assert.deepEqual(rows.map(row => row.type_id), [1, 3, 5, 6]);
+  const visibleSource = `c.faction_id NOT IN (${HIDDEN_FACTION_SQL}) AND c.corporation_id NOT IN (${HIDDEN_CORPORATION_SQL}) AND o.ak_cost=0`;
+  const invalidSource = `(c.faction_id IN (${HIDDEN_FACTION_SQL}) OR c.corporation_id IN (${HIDDEN_CORPORATION_SQL}) OR o.ak_cost>0)`;
+  const associatedWith = sourceRule => `(EXISTS (SELECT 1 FROM lp_offers o JOIN corporations c ON c.corporation_id=o.corporation_id WHERE o.type_id=t.type_id AND ${sourceRule})
+    OR EXISTS (SELECT 1 FROM lp_offer_materials m JOIN lp_offers o ON o.corporation_id=m.corporation_id AND o.offer_id=m.offer_id JOIN corporations c ON c.corporation_id=o.corporation_id WHERE m.type_id=t.type_id AND ${sourceRule})
+    OR EXISTS (SELECT 1 FROM blueprint_recipes b JOIN lp_offers o ON o.type_id=b.blueprint_type_id JOIN corporations c ON c.corporation_id=o.corporation_id WHERE b.product_type_id=t.type_id AND ${sourceRule})
+    OR EXISTS (SELECT 1 FROM blueprint_materials bm JOIN lp_offers o ON o.type_id=bm.blueprint_type_id JOIN corporations c ON c.corporation_id=o.corporation_id WHERE bm.material_type_id=t.type_id AND ${sourceRule}))`;
+  const rows = db.prepare(`SELECT t.type_id FROM item_types t WHERE ${associatedWith(invalidSource)} AND NOT ${associatedWith(visibleSource)} ORDER BY t.type_id`).all();
+  assert.deepEqual(rows.map(row => row.type_id), [1, 3, 5, 6, 8]);
   db.close();
 });

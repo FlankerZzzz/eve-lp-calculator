@@ -1,22 +1,26 @@
 import { ensureSchema } from "../../../../db/d1";
 import { batchStatements, EsiError, esiGet, isMarketUnavailable, MARKET_REGION_ID } from "../../../../lib/esi-server";
 import { updateSyncJob } from "../../../../db/sync-state";
-import { visibleCorporationSql } from "../../../../lib/data-policy";
+import { visibleCorporationSql, visibleOfferSql } from "../../../../lib/data-policy";
+import { authorizeInternalSync } from "../../../../lib/sync-auth";
 
 type HistoryRow = { date: string; average: number; highest: number; lowest: number; volume: number };
 const HISTORY_CONCURRENCY = 30;
 
 export async function POST(request: Request) {
+  const unauthorized = authorizeInternalSync(request);
+  if (unauthorized) return unauthorized;
   const db = await ensureSchema();
   const body = await request.json().catch(() => ({})) as { runStartedAt?: string };
   const runStartedAt = body.runStartedAt || new Date().toISOString();
   try {
     await updateSyncJob({ kind: "history", status: "running", phase: "历史成交日线", runStartedAt, response: { message: "开始读取市场历史" } });
     const visibleCorporation = visibleCorporationSql("c");
-    const lpOutput = `EXISTS (SELECT 1 FROM lp_offers o JOIN corporations c ON c.corporation_id=o.corporation_id WHERE o.type_id=item_types.type_id AND ${visibleCorporation})`;
-    const blueprintProduct = `EXISTS (SELECT 1 FROM blueprint_recipes b JOIN lp_offers o ON o.type_id=b.blueprint_type_id JOIN corporations c ON c.corporation_id=o.corporation_id WHERE b.product_type_id=item_types.type_id AND ${visibleCorporation})`;
-    const lpMaterial = `EXISTS (SELECT 1 FROM lp_offer_materials m JOIN lp_offers o ON o.corporation_id=m.corporation_id AND o.offer_id=m.offer_id JOIN corporations c ON c.corporation_id=o.corporation_id WHERE m.type_id=item_types.type_id AND ${visibleCorporation})`;
-    const blueprintMaterial = `EXISTS (SELECT 1 FROM blueprint_materials m JOIN blueprint_recipes b ON b.blueprint_type_id=m.blueprint_type_id JOIN lp_offers o ON o.type_id=b.blueprint_type_id JOIN corporations c ON c.corporation_id=o.corporation_id WHERE m.material_type_id=item_types.type_id AND ${visibleCorporation})`;
+    const visibleOffer = visibleOfferSql("o");
+    const lpOutput = `EXISTS (SELECT 1 FROM lp_offers o JOIN corporations c ON c.corporation_id=o.corporation_id WHERE o.type_id=item_types.type_id AND ${visibleCorporation} AND ${visibleOffer})`;
+    const blueprintProduct = `EXISTS (SELECT 1 FROM blueprint_recipes b JOIN lp_offers o ON o.type_id=b.blueprint_type_id JOIN corporations c ON c.corporation_id=o.corporation_id WHERE b.product_type_id=item_types.type_id AND ${visibleCorporation} AND ${visibleOffer})`;
+    const lpMaterial = `EXISTS (SELECT 1 FROM lp_offer_materials m JOIN lp_offers o ON o.corporation_id=m.corporation_id AND o.offer_id=m.offer_id JOIN corporations c ON c.corporation_id=o.corporation_id WHERE m.type_id=item_types.type_id AND ${visibleCorporation} AND ${visibleOffer})`;
+    const blueprintMaterial = `EXISTS (SELECT 1 FROM blueprint_materials m JOIN blueprint_recipes b ON b.blueprint_type_id=m.blueprint_type_id JOIN lp_offers o ON o.type_id=b.blueprint_type_id JOIN corporations c ON c.corporation_id=o.corporation_id WHERE m.material_type_id=item_types.type_id AND ${visibleCorporation} AND ${visibleOffer})`;
     const eligible = `(${lpOutput} OR ${blueprintProduct} OR ${lpMaterial} OR ${blueprintMaterial})`;
     const pending = (await db.prepare(`SELECT type_id FROM item_types WHERE ${eligible} AND (history_synced_at IS NULL OR history_synced_at < ?) ORDER BY COALESCE(history_synced_at, '') LIMIT 50`).bind(runStartedAt).all<{ type_id: number }>()).results;
     const results: Array<{ row: { type_id: number }; history: HistoryRow[]; syncedAt: string }> = [];

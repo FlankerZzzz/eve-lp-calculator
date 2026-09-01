@@ -23,13 +23,14 @@ type InvalidEntity = { entity_type: "势力" | "军团"; entity_id: number; name
 type InvalidItem = { type_id: number; name: string; invalid_reason: string | null };
 
 const labels: Record<SyncKind, { title: string; description: string }> = {
-  catalog: { title: "基础资料", description: "势力、NPC 军团、中文物品名与 LP 商店兑换方案" },
-  history: { title: "历史成交", description: "每 1 秒最多 50 项；市场历史成交均价、最高价、最低价与每日成交量" },
-  orders: { title: "当前订单", description: "独立同步器异步并发 100 项；每 0.5 秒批量写入；产出物记录最高收单价和最低卖单价，需求材料使用最低卖单价" },
-  rankings: { title: "首页榜单", description: "每天自动计算一次并固定保存；首页只读取快照，不现场计算" },
+  catalog: { title: "基础资料", description: "手动全量更新势力、NPC 军团、中文物品名、LP 商店方案与蓝图资料" },
+  history: { title: "历史成交", description: "每天 00:30 后自动补跑；每批最多 50 项、30 并发读取市场历史日线" },
+  orders: { title: "当前订单", description: "每 30 分钟以 8 页并发读取伏尔戈全量订单，再原子发布吉他 4-4 相关物品快照" },
+  rankings: { title: "首页榜单", description: "上海时间每日 09:00、15:00、18:00、21:00 固定重算；首页仅读取快照" },
 };
 
 const emptyCounts: Counts = { corporation_total: 0, corporation_synced: 0, item_total: 0, item_named: 0, invalid_entities: 0, invalid_items: 0, offers: 0, history_rows: 0, history_types: 0, order_types: 0 };
+const SYNC_ADMIN_SESSION_KEY = "eve-lp-sync-admin-token";
 
 export default function SyncPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -59,16 +60,25 @@ export default function SyncPage() {
   }, [refreshStatus, showInvalid]);
 
   async function control(kind: SyncKind, action: "start" | "pause" | "restart") {
+    let adminToken = window.sessionStorage.getItem(SYNC_ADMIN_SESSION_KEY) || "";
+    if (!adminToken) {
+      adminToken = window.prompt("请输入同步管理口令。口令只保留在当前浏览器标签页，关闭标签页后失效。")?.trim() || "";
+      if (!adminToken) { setMessage("已取消同步操作"); return; }
+      window.sessionStorage.setItem(SYNC_ADMIN_SESSION_KEY, adminToken);
+    }
     setPendingKind(kind);
     setMessage(action === "pause" ? `正在暂停${labels[kind].title}` : action === "restart" ? `正在重新同步${labels[kind].title}` : `正在恢复${labels[kind].title}后台同步`);
     try {
       const response = await fetch("/api/sync/control", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-sync-admin-token": adminToken },
         body: JSON.stringify({ kind, action }),
       });
       const result = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      if (!response.ok) {
+        if ([403, 503].includes(response.status)) window.sessionStorage.removeItem(SYNC_ADMIN_SESSION_KEY);
+        throw new Error(result.error || `HTTP ${response.status}`);
+      }
       setMessage(action === "pause" ? `${labels[kind].title}已暂停，进度已保存` : action === "restart" ? `${labels[kind].title}已开始新一轮同步，进度已清零` : `${labels[kind].title}已恢复，关闭网页不受影响`);
       await refreshStatus();
     } catch (error) {
@@ -89,7 +99,7 @@ export default function SyncPage() {
       <Link className="nav-action" href="/">返回收益分析 →</Link>
     </nav>
 
-    <header className="sync-header"><div><div className="hero-kicker"><span>SUBSPACE DATA OPERATIONS</span><i>PRIVATE NETWORK</i></div><p className="eyebrow">/SYNC</p><h1>数据同步状态</h1><p>同步循环运行在本地服务端。刷新或关闭网页不会中断作业；只有关闭 3000 端口服务才会停止。每次仅执行一个保守的小批次。</p></div><button className={`invalid-toggle ${showInvalid ? "active" : ""}`} onClick={() => setShowInvalid(value => !value)}>{showInvalid ? "隐藏无效数据" : "显示无效数据"}</button></header>
+    <header className="sync-header"><div><div className="hero-kicker"><span>SUBSPACE DATA OPERATIONS</span><i>PRIVATE NETWORK</i></div><p className="eyebrow">/SYNC</p><h1>数据同步状态</h1><p>同步循环由独立的 Sync 服务在后台运行，刷新或关闭网页不会中断作业。目录、历史、订单和榜单作业互斥执行；合同缓存使用独立的 30 分钟周期。</p></div><button className={`invalid-toggle ${showInvalid ? "active" : ""}`} onClick={() => setShowInvalid(value => !value)}>{showInvalid ? "隐藏无效数据" : "显示无效数据"}</button></header>
 
     <section className="metric-grid">
       <div><span>军团</span><strong>{counts.corporation_synced}<small> / {counts.corporation_total}</small></strong></div>
@@ -124,7 +134,7 @@ export default function SyncPage() {
       <div className="panel-title"><h2>无效数据策略</h2><span>仅供审计 · 原始目录保留，公开结果与市场同步排除</span></div>
       <h3 className="invalid-section-title">排除势力与军团</h3>
       <div className="invalid-items invalid-entities">{invalidEntities.map(entity => <div key={`${entity.entity_type}:${entity.entity_id}`}><code>{entity.entity_id}</code><b>{entity.entity_type} · {entity.name}</b><span>{entity.invalid_reason || "按数据策略排除"}</span></div>)}</div>
-      <h3 className="invalid-section-title">永久跳过市场查询的物品</h3>
+      <h3 className="invalid-section-title">永久跳过市场查询的物品（含 AK 特殊兑换）</h3>
       {invalidItems.length ? <div className="invalid-items">{invalidItems.map(item => <div key={item.type_id}><code>{item.type_id}</code><b>{item.name}</b><span>{item.invalid_reason || "仅与已排除来源关联"}</span></div>)}</div> : <p className="no-events">目前没有仅与排除来源关联的市场物品</p>}
     </section>}
 
