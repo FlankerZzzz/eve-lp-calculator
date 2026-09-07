@@ -389,6 +389,37 @@ check("脑插目录由全量同步生成且合同按增量明细签名匹配", a
   assert.match(contracts, /unit_price: contract\.price \/ item\.set_count/);
   assert.match(page, /公开合同价格/);
   assert.match(page, /implant-item-materials/);
+  assert.match(page, /setRedemptionCost/);
+  assert.match(page, /implant-contract-ratio/);
+  assert.match(page, /contract\.unit_price - setRedemptionCost/);
+});
+
+check("蓝图展开材料区展示收益汇总并按需查询公开合同", async () => {
+  const [page, css] = await Promise.all([source("app/page.tsx"), source("app/globals.css")]);
+  assert.match(page, /BlueprintContractMatch/);
+  assert.match(page, /blueprintContractControllersRef/);
+  assert.match(page, /loadedBlueprintContractTypesRef/);
+  assert.match(page, /blueprint_type_id=\$\{typeId\}&page_size=10/);
+  assert.match(page, /signal: controller\.signal/);
+  assert.match(page, /总材料成本/);
+  assert.match(page, /产出物收单价/);
+  assert.match(page, /最小利润/);
+  assert.match(page, /合同价不参与利润/);
+  assert.match(page, /蓝图公开合同价格/);
+  assert.match(page, /每流程/);
+  assert.doesNotMatch(page, />ME \{contract\.material_efficiency/);
+  assert.match(page, /contractReferenceRatio/);
+  assert.match(page, /ISK\/LP · 合同参考比例/);
+  assert.match(page, /material\.material_kind !== "制造材料"/);
+  assert.match(page, /unit="张"/);
+  assert.match(page, /data\.status === "ready"/);
+  assert.match(page, /仅作参考，不参与利润计算/);
+  assert.match(page, /合同缓存正在建立，请稍后重试/);
+  assert.match(page, /offer\.is_blueprint \? blueprintContractPanel/);
+  assert.match(css, /\.blueprint-material-summary\{[^}]*grid-template-columns:repeat\(4/);
+  assert.match(css, /\.blueprint-contract-list>div::before\{content:"复制提示 · 左键单击蓝图名称"/);
+  assert.match(css, /@media\(max-width:760px\)\{\.blueprint-material-summary\{grid-template-columns:repeat\(2/);
+  assert.match(css, /\.blueprint-contract-list>div\{grid-template-columns:minmax\(0,1fr\) auto/);
 });
 
 check("合同地点使用国服吉他四卫星四名称", async () => {

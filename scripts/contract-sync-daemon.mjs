@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
-import { canonicalTypeSignature, classifyContractItems, CONTRACT_CLASSIFIER_VERSION } from "./contract-sync-core.mjs";
+import { visibleCorporationSql, visibleOfferSql } from "../lib/data-policy.ts";
+import { canonicalTypeSignature, classifyBlueprintCopyContractItems, classifyContractItems, CONTRACT_CLASSIFIER_VERSION } from "./contract-sync-core.mjs";
 
 const ESI_BASE = (process.env.ESI_BASE_URL || "https://ali-esi.evepc.163.com").replace(/\/$/, "");
 const REGION_ID = 10000002;
@@ -265,35 +266,77 @@ function contractLocation(contract) {
   return { solarSystemId: null, name: `空间站 #${contract.start_location_id}` };
 }
 
+function visibleBlueprintTypeIds() {
+  const requiredTables = ["blueprint_recipes", "lp_offers", "corporations"];
+  const existingTables = new Set(db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${requiredTables.map(() => "?").join(",")})`).all(...requiredTables).map(row => row.name));
+  if (existingTables.size !== requiredTables.length) return [];
+  return db.prepare(`SELECT DISTINCT br.blueprint_type_id
+    FROM blueprint_recipes br
+    JOIN lp_offers o ON o.type_id=br.blueprint_type_id
+    JOIN corporations c ON c.corporation_id=o.corporation_id
+    WHERE ${visibleCorporationSql("c")} AND ${visibleOfferSql("o")}`).all().map(row => Number(row.blueprint_type_id));
+}
+
+function blueprintSnapshotKey(blueprintTypeId) {
+  return `blueprint-copy:${blueprintTypeId}`;
+}
+
 function publish({ directory, candidates, generationId, metrics, startedAt }) {
   const now = new Date();
   const fetchedAt = now.toISOString();
   const expiresAt = new Date(now.getTime() + 40 * 60 * 1000).toISOString();
   const retentionCutoff = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000).toISOString();
   const definitions = db.prepare("SELECT set_key FROM implant_catalog").all();
-  if (!definitions.length) throw new Error("脑插套装签名目录为空，请先完成全量目录同步");
+  const blueprintTypeIds = visibleBlueprintTypeIds();
+  if (!definitions.length && !blueprintTypeIds.length) throw new Error("合同目录为空，请先完成全量目录同步");
   const payloads = new Map(definitions.map(row => [row.set_key, []]));
-  const cacheRows = db.prepare("SELECT contract_id,status,set_signature,set_count FROM contract_item_cache WHERE status='ready' AND set_signature IS NOT NULL").all();
+  const blueprintPayloads = new Map(blueprintTypeIds.map(typeId => [typeId, []]));
+  const cacheRows = db.prepare("SELECT contract_id,status,set_signature,set_count,payload FROM contract_item_cache WHERE status='ready'").all();
   const cache = new Map(cacheRows.map(row => [row.contract_id, row]));
   for (const contract of candidates) {
     const item = cache.get(contract.contract_id);
-    if (!item || !payloads.has(item.set_signature) || !item.set_count) continue;
+    if (!item) continue;
     const location = contractLocation(contract);
-    payloads.get(item.set_signature).push({
-      contract_id: contract.contract_id,
-      date_issued: contract.date_issued,
-      date_expired: contract.date_expired,
-      price: contract.price,
-      unit_price: contract.price / item.set_count,
-      set_count: item.set_count,
-      start_location_id: contract.start_location_id,
-      end_location_id: contract.end_location_id,
-      solar_system_id: location.solarSystemId,
-      location_name: location.name,
-    });
+    if (payloads.has(item.set_signature) && item.set_count) {
+      payloads.get(item.set_signature).push({
+        contract_id: contract.contract_id,
+        date_issued: contract.date_issued,
+        date_expired: contract.date_expired,
+        price: contract.price,
+        unit_price: contract.price / item.set_count,
+        set_count: item.set_count,
+        start_location_id: contract.start_location_id,
+        end_location_id: contract.end_location_id,
+        solar_system_id: location.solarSystemId,
+        location_name: location.name,
+      });
+    }
+    try {
+      const blueprint = classifyBlueprintCopyContractItems(JSON.parse(item.payload));
+      if (!blueprint.valid || !blueprintPayloads.has(blueprint.blueprintTypeId)) continue;
+      blueprintPayloads.get(blueprint.blueprintTypeId).push({
+        contract_id: contract.contract_id,
+        date_issued: contract.date_issued,
+        date_expired: contract.date_expired,
+        price: contract.price,
+        unit_price: contract.price / blueprint.copyCount,
+        price_per_run: contract.price / (blueprint.copyCount * blueprint.runs),
+        copy_count: blueprint.copyCount,
+        runs: blueprint.runs,
+        material_efficiency: blueprint.materialEfficiency,
+        time_efficiency: blueprint.timeEfficiency,
+        start_location_id: contract.start_location_id,
+        end_location_id: contract.end_location_id,
+        solar_system_id: location.solarSystemId,
+        location_name: location.name,
+      });
+    } catch {
+      // A corrupt cache row must not publish a potentially mismatched blueprint price.
+    }
   }
   for (const contracts of payloads.values()) contracts.sort((a, b) => a.unit_price - b.unit_price || b.date_issued.localeCompare(a.date_issued));
-  metrics.matchedContracts = [...payloads.values()].reduce((sum, contracts) => sum + contracts.length, 0);
+  for (const contracts of blueprintPayloads.values()) contracts.sort((a, b) => a.price_per_run - b.price_per_run || a.unit_price - b.unit_price || b.date_issued.localeCompare(a.date_issued));
+  metrics.matchedContracts = [...payloads.values(), ...blueprintPayloads.values()].reduce((sum, contracts) => sum + contracts.length, 0);
   metrics.durationMs = Date.now() - startedAt;
 
   const upsertHeader = db.prepare(`INSERT INTO contract_headers(contract_id,contract_type,price,date_issued,date_expired,start_location_id,end_location_id,volume,last_seen_generation,last_seen_at,active)
@@ -312,6 +355,7 @@ function publish({ directory, candidates, generationId, metrics, startedAt }) {
     db.prepare("DELETE FROM contract_headers WHERE active=0 AND last_seen_at<?").run(retentionCutoff);
     db.prepare("DELETE FROM contract_snapshots").run();
     for (const [signature, contracts] of payloads) insertSnapshot.run(signature, JSON.stringify(contracts), fetchedAt, expiresAt);
+    for (const [blueprintTypeId, contracts] of blueprintPayloads) insertSnapshot.run(blueprintSnapshotKey(blueprintTypeId), JSON.stringify(contracts), fetchedAt, expiresAt);
     db.prepare(`UPDATE contract_sync_state SET status='idle',locked_until=NULL,finished_at=?,last_success_at=?,heartbeat_at=?,generation_id=?,retry_count=0,
       directory_contracts=?,candidate_contracts=?,cached_contracts=?,fetched_contracts=?,unavailable_contracts=?,matched_contracts=?,request_count=?,duration_ms=?,error_message=NULL WHERE id=1`)
       .run(fetchedAt, fetchedAt, fetchedAt, generationId, directory.length, candidates.length, metrics.cachedContracts, metrics.fetchedContracts,
