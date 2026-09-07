@@ -232,8 +232,8 @@ check("企业详情使用真实收单并在全量结果排序后分页", async (
   assert.match(page, /offer\.lpRatio === 0/);
   assert.match(page, /LP 成本为 0 · 比例不可计算/);
   assert.match(page, /历史估值仅供参考 · 按 0 计算/);
-  assert.match(route, /item\.buy_price > 0 \? item\.buy_price : item\.expected_price/);
-  assert.doesNotMatch(route, /item\.expected_price > 0 \? item\.expected_price : item\.sell_price/);
+  assert.match(route, /buy_execution_price: execution\.price \|\| offer\.buy_price/);
+  assert.match(route, /buy_execution_coverage: execution\.price \? execution\.coverage/);
 });
 
 check("组合计算按材料和产出数量逐档成交，并显示保守利润和 LP 比例", async () => {
@@ -364,8 +364,12 @@ check("脑插可兑换套数只按 LP 计算并列出材料缺口", async () => 
   assert.match(page, /现有卖单/);
   assert.match(route, /sell_available_volume/);
   assert.match(page, /材料可能不足，请检查材料/);
-  assert.match(page, /无收单 · 采用历史估值/);
-  assert.match(page, /无收单及历史估值 · 请自行评估价值/);
+  assert.match(route, /item\.sell_price > 0 \? item\.sell_price : item\.expected_price/);
+  assert.doesNotMatch(route, /item\.buy_price > 0 \? item\.buy_price : item\.expected_price/);
+  assert.match(page, /无卖单 · 采用历史估值/);
+  assert.match(page, /无卖单及历史成交 · 不采用收单估值/);
+  assert.match(page, /数据不完整（\$\{sellPricedCount\}\/\$\{set\.item_count\}）/);
+  assert.match(page, /仅作立即出售参考/);
   assert.match(route, /expected_price/);
   assert.match(route, /priceSource/);
   assert.match(page, /material-missing/);

@@ -280,8 +280,11 @@ export async function GET(request: Request) {
       const items = levels.map(level => set.get(level)!);
       const chineseName = items[0].name_zh?.replace(/[—-]?(?:阿尔法|贝它|伽玛|德尔塔|伊普西隆|欧米伽)型$/, "").replace(/[—\-\s]+$/, "");
       const totalLp = items.reduce((sum, item) => sum + item.lp_cost, 0);
-      const valuationPrice = (item: ImplantSetRow) => item.buy_price > 0 ? item.buy_price : item.expected_price;
-      const priceSource = (item: ImplantSetRow) => item.buy_price > 0 ? "buy" : item.expected_price > 0 ? "expected" : "missing";
+      // A set's market value is a sale-side reference: use an active sell order,
+      // then recent history. Buy orders are exposed separately as an immediate
+      // liquidation reference and must never make an incomplete set look priced.
+      const valuationPrice = (item: ImplantSetRow) => item.sell_price > 0 ? item.sell_price : item.expected_price;
+      const priceSource = (item: ImplantSetRow) => item.sell_price > 0 ? "sell" : item.expected_price > 0 ? "expected" : "missing";
       const marketValue = items.every(item => valuationPrice(item) > 0) ? items.reduce((sum, item) => sum + valuationPrice(item), 0) : null;
       const netProfit = marketValue !== null ? items.reduce((sum, item) => sum + valuationPrice(item) * 0.97 - item.isk_cost - item.material_cost, 0) : null;
       return { name: chineseName || name, is_blueprint: source === "blueprint", item_count: 6, total_lp: totalLp, lp_ratio: netProfit !== null && totalLp > 0 ? netProfit / totalLp : null, priced_count: items.filter(item => valuationPrice(item) > 0).length, market_value: marketValue, items: items.map((item, index) => ({ level: levels[index], type_id: item.blueprint_type_id, market_type_id: item.type_id, name: item.name_zh || item.name_en, lp_cost: item.lp_cost, isk_cost: item.isk_cost, material_cost: item.material_cost, buy_price: item.buy_price, expected_price: item.expected_price, sell_price: item.sell_price, valuation_price: valuationPrice(item), price_source: priceSource(item), materials: implantMaterials.get(`${item.corporation_id}:${item.offer_id}`) ?? [] })) };
