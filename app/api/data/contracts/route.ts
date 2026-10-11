@@ -48,8 +48,11 @@ export async function GET(request: Request) {
     row = await db.prepare("SELECT payload,fetched_at,expires_at,status,error_message FROM contract_snapshots WHERE set_key IN (?,?) ORDER BY CASE WHEN set_key=? THEN 0 ELSE 1 END LIMIT 1")
       .bind(key, rawKey, key).first<{ payload: string; fetched_at: string; expires_at: string; status: string; error_message: string | null }>();
   }
-  const contracts = row ? (JSON.parse(row.payload) as ContractMatch[]).map(contract => ({ ...contract, location_name: localizeContractLocation(contract.location_name) })) : [];
+  const now = Date.now();
+  const contracts = row ? (JSON.parse(row.payload) as ContractMatch[])
+    .filter(contract => Date.parse(contract.date_expired) > now)
+    .map(contract => ({ ...contract, location_name: localizeContractLocation(contract.location_name) })) : [];
   const pagesCount = Math.max(1, Math.ceil(contracts.length / pageSize));
   const safePage = Math.min(page, pagesCount);
-  return Response.json({ contracts: contracts.slice((safePage - 1) * pageSize, safePage * pageSize), total: contracts.length, page: safePage, pages: pagesCount, fetched_at: row?.fetched_at ?? null, stale: !row || new Date(row.expires_at).getTime() < Date.now(), status: row?.status ?? "pending", source: referenceOnly ? "后端合同缓存（仅供参考）" : "后端合同缓存", reference_only: referenceOnly, error: row?.error_message ?? null }, { headers: { "cache-control": "no-store" } });
+  return Response.json({ contracts: contracts.slice((safePage - 1) * pageSize, safePage * pageSize), total: contracts.length, page: safePage, pages: pagesCount, fetched_at: row?.fetched_at ?? null, stale: !row || new Date(row.expires_at).getTime() < now, status: row?.status ?? "pending", source: referenceOnly ? "后端合同缓存（仅供参考）" : "后端合同缓存", reference_only: referenceOnly, error: row?.error_message ?? null }, { headers: { "cache-control": "no-store" } });
 }

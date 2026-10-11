@@ -438,6 +438,8 @@ main.contract-tool-page{max-width:1800px;width:100%;padding-inline:clamp(20px,3v
 .contract-tool-page .contract-analyzer-actions>button{width:auto;flex:0 0 auto}
 .contract-analyzer .contract-clear-button{background:transparent;border-color:#36505c;color:var(--muted)}
 .contract-analyzer .contract-clear-button:hover{background:#172a32;color:var(--text);border-color:#63828c}
+.contract-input-errors{margin-top:12px;padding:12px 16px;border:1px solid #865b2f;background:#241b12;color:#ffd29a;max-height:260px;overflow:auto;overflow-wrap:anywhere;font-size:12px;line-height:1.7}
+.contract-input-errors ul{margin:0;padding-left:18px}.contract-input-errors small{display:block;margin-top:8px}
 .contract-tool-page .contract-analyzer button{border-radius:4px;min-height:42px}
 .contract-tool-page .contract-analysis-panel{margin-top:32px;border-radius:6px;box-shadow:0 16px 48px #0002}
 .contract-tool-page .contract-analysis-head{padding:26px 24px;gap:20px 28px}

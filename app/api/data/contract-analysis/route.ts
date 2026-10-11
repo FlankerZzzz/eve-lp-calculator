@@ -1,7 +1,7 @@
 import { ensureBusinessSchema as ensureSchema } from "../../../../db/business";
 import { MARKET_REGION_ID } from "../../../../lib/esi-server";
 import { esiPost } from "../../../../lib/esi-server";
-import { mergeContractItems, parseContractText, createContractNameResolver } from "../../../../lib/contract-analysis";
+import { mergeContractItems, parseContractText, createContractNameResolver, ContractTextError } from "../../../../lib/contract-analysis";
 import { createContractNameCache } from "../../../../lib/contract-name-cache";
 const lookupNames=createContractNameCache(names=>esiPost("/universe/ids/",names,{language:"zh"}));
 type CachedItem = { type_id?: number; quantity?: number; name?: string; name_zh?: string; is_included?: boolean };
@@ -80,7 +80,12 @@ export async function POST(request: Request) {
   try { body = await request.json(); } catch { return Response.json({ error: "请输入合同物品文本" }, { status: 400 }); }
   if (!body || typeof body !== 'object' || Array.isArray(body) || !('text' in body) || typeof body.text !== 'string') return Response.json({ error: "请输入有效的合同物品文本", code: "INVALID_INPUT" }, { status: 400 });
   if (body.text.length > 1024 * 1024) return Response.json({ error: "合同文本过大，请分批查询", code: "INPUT_TOO_LARGE" }, { status: 413 });
-  const parsed = parseContractText(body.text);
+  let parsed: ReturnType<typeof parseContractText>;
+  try { parsed = parseContractText(body.text); }
+  catch (error) {
+    if (error instanceof ContractTextError) return Response.json({ error: error.message, code: "INVALID_CONTRACT_LINES", issues: error.issues, issue_count: error.issueCount }, { status: 422 });
+    throw error;
+  }
   if (!parsed.length) return Response.json({ error: "没有识别到有效物品，请按“品目\t数量\t分类\t类型\t槽位”粘贴" }, { status: 400 });
   if (new Set(parsed.map(item => item.name)).size > 500) return Response.json({ error: "合同物品种类超过 500，请分批查询", code: "TOO_MANY_ITEMS" }, { status: 422 });
   const db = await ensureSchema();
@@ -102,7 +107,13 @@ export async function POST(request: Request) {
   const unresolved = names.filter(name => !resolveName(name).item);
   const unresolvedItems = unresolved.map(name => ({ name, quantity: parsed.filter(item => item.name === name).reduce((sum, item) => sum + item.quantity, 0) }));
   const grouped = new Map<number, { type_id: number; quantity: number; name_zh?: string }>();
-  for (const item of parsed) { const match = resolveName(item.name).item; if (!match) continue; const previous = grouped.get(match.type_id); if (previous) previous.quantity += item.quantity; else grouped.set(match.type_id, { type_id: match.type_id, quantity: item.quantity, name_zh: match.name_zh || item.name }); }
+  for (const item of parsed) {
+    const match = resolveName(item.name).item; if (!match) continue;
+    const previous = grouped.get(match.type_id), quantity = (previous?.quantity || 0) + item.quantity;
+    if (!Number.isSafeInteger(quantity)) return Response.json({ error: "物品合并后的数量超过可安全计算的整数范围，本次未进行估价。", code: "INVALID_CONTRACT_LINES", issues: [{ line: item.line, name: item.name, reason: "合并后的数量超过可安全计算的整数范围" }], issue_count: 1 }, { status: 422 });
+    if (previous) previous.quantity = quantity;
+    else grouped.set(match.type_id, { type_id: match.type_id, quantity, name_zh: match.name_zh || item.name });
+  }
   if (!grouped.size) return Response.json({ error: `无法在本地物品目录中匹配：${unresolved.join("、")}`, code: "UNRESOLVED_ITEMS", unresolved, unresolved_items: unresolvedItems }, { status: 422 });
   return Response.json({ ...await quoteItems(db, [...grouped.values()], unresolved), unresolved_items: unresolvedItems, input_count: parsed.length, merged_count: grouped.size }, { headers: { "cache-control": "no-store" } });
 }
