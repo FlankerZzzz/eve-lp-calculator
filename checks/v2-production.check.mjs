@@ -24,7 +24,11 @@ test('纯 V2 运行配置不再包含旧库、旧同步器或测试模式',()=>{
  assert.doesNotMatch(source('db/business.ts'),/from '.\/d1'|business_test_ready|V2_TEST_MODE/);assert.match(source('db/business.ts'),/readOnly: true/);
  assert.match(source('docker-compose.yml'),/scripts\/v2\/worker.mjs/);assert.doesNotMatch(source('docker-compose.yml'),/docker-data\/sqlite|wrangler|sync-daemon|SYNC_INTERNAL_TOKEN/);
  assert.match(source('nginx/nginx.conf'),/location = \/sync-v2/);assert.match(source('nginx/nginx.conf'),/location \^~ \/api\/v2\//);
- assert.equal(JSON.parse(source('package.json')).version,'2.0.0');assert.match(source('app/page.tsx'),/V2.0.0/);
+ const version=JSON.parse(source('package.json')).version;
+ assert.equal(JSON.parse(source('package-lock.json')).version,version);
+ assert.ok(source('app/page.tsx').includes(`const APP_VERSION = "V${version}"`));
+ assert.ok(source('VERSION.md').includes(`## V${version}`));
+ assert.ok(source('README.md').includes(`V${version}`));
 });
 test('V2 排行保持真实收单、深度保护、税率和跨军团去重签名',()=>{
  const base={type_id:1,quantity:1,lp_cost:10,isk_cost:1,buy_price:10,sell_price:12,materials:[]};

@@ -57,7 +57,7 @@ function implantMaterialRequirements(set: ImplantSet, setCount: number): Implant
   return [...totals.values()].map(material => ({ ...material, missing: Math.max(0, material.required - material.available) }));
 }
 const MAX_CALCULATION_LP = 99_990_000;
-const APP_VERSION = "V2.0.0";
+const APP_VERSION = "V2.0.1";
 const LP_STORAGE_KEY = "eve-lp-calculator:lp";
 const OPTIMIZATION_STORAGE_KEY = "eve-lp-calculator:optimization";
 const FAVORITE_CORPORATIONS_STORAGE_KEY = "eve-lp-calculator:favorite-corporations";
@@ -345,8 +345,8 @@ export default function Home() {
       try {
         const typeIds = set.items.map(item => item.market_type_id || item.type_id).join(",");
         const response = await fetch(`/api/data/contracts?type_ids=${typeIds}&page_size=10`, { cache: "no-store", signal: controller.signal });
-        if (!response.ok) throw new Error("公开合同查询失败");
         const data = await response.json() as { contracts: ContractMatch[]; stale: boolean; fetched_at: string | null; error?: string | null };
+        if (!response.ok) throw new Error(data.error || "公开合同查询失败");
         return [key, { loading: false, contracts: data.contracts, stale: data.stale, fetchedAt: data.fetched_at, error: data.error || undefined }] as const;
       } catch (error) { return [key, { loading: false, contracts: [], error: error instanceof Error ? error.message : "公开合同查询失败" }] as const; }
     })).then(results => { if (!cancelled) setImplantContracts(Object.fromEntries(results)); });

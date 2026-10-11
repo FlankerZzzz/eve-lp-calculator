@@ -60,6 +60,29 @@ export function visibleImplantSetsSql() {
     WHERE COALESCE(r.product_type_id,o.type_id) IN (s.slot_1_type_id,s.slot_2_type_id,s.slot_3_type_id,s.slot_4_type_id,s.slot_5_type_id,s.slot_6_type_id)
     GROUP BY cs.corporation_id,cs.set_id HAVING COUNT(DISTINCT COALESCE(r.product_type_id,o.type_id))=6`;
 }
+// Contract references use finished implants, including sets offered as blueprints.
+// Preserve manually maintained sets; derive additional complete sets without writing tables.
+export function contractImplantSetsSql() {
+  const levels=['Alpha','Beta','Gamma','Delta','Epsilon','Omega'];
+  return `WITH levels(level,slot) AS (VALUES ${levels.map((level,i)=>`('${level}',${i+1})`).join(',')}),
+    products AS (
+      SELECT o.corporation_id,CASE WHEN r.blueprint_id IS NULL THEN 0 ELSE 1 END blueprint,
+        COALESCE(r.product_type_id,o.type_id) type_id,i.name_en
+      FROM lp_exchange o LEFT JOIN recipes r ON r.blueprint_id=o.type_id
+      JOIN items i ON i.type_id=COALESCE(r.product_type_id,o.type_id)
+      WHERE o.is_blocked='N'
+    ), derived AS (
+      SELECT p.corporation_id,p.blueprint,
+        substr(p.name_en,1,length(p.name_en)-length(l.level)-1) family,
+        ${levels.map((_,i)=>`MAX(CASE WHEN l.slot=${i+1} THEN p.type_id END) slot_${i+1}_type_id`).join(',')}
+      FROM products p JOIN levels l ON substr(p.name_en,-length(l.level)-1)=' '||l.level
+      GROUP BY p.corporation_id,p.blueprint,family
+      HAVING COUNT(DISTINCT l.slot)=6 AND COUNT(DISTINCT p.type_id)=6
+    )
+    SELECT ${levels.map((_,i)=>`slot_${i+1}_type_id`).join(',')} FROM derived
+    UNION SELECT ${levels.map((_,i)=>`slot_${i+1}_type_id`).join(',')} FROM implant_sets
+      WHERE set_id IN (${visibleImplantSetsSql()})`;
+}
 export function updateLpFlags(db,corporationId,offerId,changes) {
   if(!Number.isSafeInteger(corporationId)||corporationId<1||!Number.isSafeInteger(offerId)||offerId<1)throw new Error('军团 ID 和方案 ID 无效');
   const keys=Object.keys(changes);

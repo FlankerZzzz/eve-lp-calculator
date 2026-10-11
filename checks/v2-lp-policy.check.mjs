@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import ts from 'typescript';
 import { openV2,getState } from '../scripts/v2/database.mjs';
-import { migrateLpFlags,updateLpFlags,lpFlagMap,filterLpRankingRows,visibleImplantSetsSql,getLpPolicy,saveLpPolicy } from '../scripts/v2/lp-policy.mjs';
+import { migrateLpFlags,updateLpFlags,lpFlagMap,filterLpRankingRows,visibleImplantSetsSql,contractImplantSetsSql,getLpPolicy,saveLpPolicy } from '../scripts/v2/lp-policy.mjs';
 import { initialLpFlags,businessLpVisibility,HIDDEN_FACTIONS,HIDDEN_CORPORATIONS } from '../lib/data-policy.ts';
 import { V2Sync } from '../scripts/v2/sync.mjs';
 import { rebuildV2Rankings } from '../scripts/v2/rankings.mjs';
@@ -84,6 +84,37 @@ check('V2 脑插六件需同一军团完整可见，屏蔽单件不影响另一�
   updateLpFlags(db,2,2,{is_blocked:'Y'});assert.equal(db.prepare(visibleImplantSetsSql()).all().length,0);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM lp_exchange').get().n,12);
 });
+check('蓝图脑插合同按成品自动识别，无需人工名单，支付与屏蔽规则不变',t=>{
+  const {db,offer,file,dir}=fixture(t);
+  const levels=['Alpha','Beta','Gamma','Delta','Epsilon','Omega'];
+  for(let id=1;id<=6;id++) {
+    db.prepare('UPDATE items SET name_en=? WHERE type_id=?').run(`High-grade Rapture ${levels[id-1]}`,id);
+    db.prepare('INSERT INTO recipes VALUES(?,?,1,1,?,?)').run(id+10,id,'N','fixture');
+    offer(1,id,500001,0,id+10);
+  }
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM implant_sets').get().n,0);
+  assert.equal(db.prepare(contractImplantSetsSql()).all().length,1);
+  // Split offers across corporations or direct/blueprint sources must not form a set.
+  updateLpFlags(db,1,1,{is_blocked:'Y'});offer(2,1,500001,0,11);offer(1,7,500001,0,1);
+  assert.equal(db.prepare(contractImplantSetsSql()).all().length,0);
+  updateLpFlags(db,1,1,{is_blocked:'N'});
+  const headers=[{contract_id:101,price:1200},{contract_id:102,price:0},{contract_id:103,price:100},{contract_id:104,price:1200}];
+  for(const header of headers) {
+    db.prepare('INSERT INTO contracts VALUES(?,?,?)').run(header.contract_id,JSON.stringify({...header,type:'item_exchange',date_expired:'2099-01-01',start_location_id:1}),'fixture');
+    const entries=Array.from({length:6},(_,i)=>({record_id:i+1,type_id:i+1+(header.contract_id===104?10:0),quantity:2,is_included:true}));
+    if([102,103].includes(header.contract_id))entries.push({record_id:7,type_id:44992,quantity:20,is_included:false});
+    for(const entry of entries)db.prepare('INSERT INTO contract_items VALUES(?,?,?,?,?,?)').run(header.contract_id,entry.record_id,entry.type_id,entry.is_included?1:0,entry.quantity,JSON.stringify(entry));
+  }
+  const sync=new V2Sync({filename:file,logRoot:join(dir,'logs')});
+  try {
+    sync.buildContractCache();
+    const cached=JSON.parse(db.prepare('SELECT payload FROM contract_cache WHERE set_key=?').get('1,2,3,4,5,6').payload);
+    assert.deepEqual(cached.map(row=>row.contract_id),[101,102]);
+    assert.equal(cached[0].unit_price,600);assert.equal(cached[1].payment_type,'PLEX');
+    updateLpFlags(db,1,2,{is_blocked:'Y'});sync.buildContractCache();
+    assert.equal(db.prepare('SELECT 1 FROM contract_cache WHERE set_key=?').get('1,2,3,4,5,6'),undefined);
+  } finally {sync.db.close();}
+});
 check('V2 榜单写入按标记去重并补位，保留全局非高安，不破坏原始表',t=>{
   const {db,offer}=fixture(t);offer(1,1);offer(2,1);offer(3,2,500010,0,2);offer(4,3,500001,0,3);
   updateLpFlags(db,4,3,{is_blocked:'Y'});
@@ -103,7 +134,7 @@ check('V2 LP 维护 API 需要管理授权，公共详情和合同脑插路径�
   const source=path=>readFileSync(new URL(`../${path}`,import.meta.url),'utf8');
   const admin=source('app/api/v2/lp-policy/route.ts');assert.equal((admin.match(/authorizeSyncControl\(request\)/g)??[]).length,2);
   assert.match(source('app/api/data/offers/route.ts'),/o.corporation_id=\? AND \$\{visibleOffer\}/);
-  assert.match(source('app/api/data/contracts/route.ts'),/visibleImplantSetsSql\(\)/);
+  assert.match(source('app/api/data/contracts/route.ts'),/contractImplantSetsSql\(\)/);
   assert.match(source('scripts/v2/sync.mjs'),/is_blocked='N'/);
   assert.match(source('app/sync-v2/page.tsx'),/<LpPolicyPanel/);
   assert.doesNotMatch(source('scripts/v2/rankings.mjs'),/is_high_sec='Y'/);
@@ -158,4 +189,13 @@ check('V2 实际 API 查询、详情、旧榜单和维护读写保持屏蔽一�
   assert.equal((await offers.GET(request('/api/data/offers?corporation_id=1000179&view=detail'))).status,200);
   config=getLpPolicy(db);config.rules.push({scope:'item',target_id:20,field:'is_blocked',value:'Y',reason:'按物品跨军团屏蔽'});saveLpPolicy(db,config,config.version);
   for(const id of [1000179,4])assert.equal((await offers.GET(request(`/api/data/offers?corporation_id=${id}&view=detail`))).status,404);
+  for(let id=1;id<=6;id++) {
+    db.prepare('UPDATE items SET name_en=? WHERE type_id=?').run(`High-grade Rapture ${['Alpha','Beta','Gamma','Delta','Epsilon','Omega'][id-1]}`,id);
+    db.prepare('INSERT INTO recipes VALUES(?,?,1,1,?,?)').run(id+10,id,'N','fixture');
+    offer(5,id,500001,0,id+10);
+  }
+  assert.equal((await contracts.GET(request('/api/data/contracts?type_ids=1,2,3,4,5,6'))).status,200);
+  assert.equal((await contracts.GET(request('/api/data/contracts?type_ids=11,12,13,14,15,16'))).status,404);
+  updateLpFlags(db,5,2,{is_blocked:'Y'});
+  assert.equal((await contracts.GET(request('/api/data/contracts?type_ids=1,2,3,4,5,6'))).status,404);
 });

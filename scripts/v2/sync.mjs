@@ -4,7 +4,7 @@ import { openV2, transaction, setState, getState } from './database.mjs';
 import { summarize } from '../order-fetch-process.mjs';
 import { canonicalTypeSignature, classifyContractItems, classifyBlueprintCopyContractItems } from '../contract-sync-core.mjs';
 import { NPC_CORPORATION_FACTIONS } from '../../lib/npc-factions.ts';
-import { visibleImplantSetsSql, lpFlagsForOffer } from './lp-policy.mjs';
+import { contractImplantSetsSql, lpFlagsForOffer } from './lp-policy.mjs';
 import { rebuildV2Rankings } from './rankings.mjs';
 import { readSdeTypeIndex } from './sde.mjs';
 
@@ -339,8 +339,7 @@ export class V2Sync {
   }
   buildContractCache() {
     const locations=new Map(this.db.prepare('SELECT location_id,system_name,mapping_name FROM station_mappings').all().map(row=>[row.location_id,`${row.system_name}·${row.mapping_name}`]));
-    const visibleSets=new Set(this.db.prepare(visibleImplantSetsSql()).all().map(row=>row.set_id));
-    const groups=new Map();for(const set of this.db.prepare('SELECT * FROM implant_sets').all().filter(set=>visibleSets.has(set.set_id))){const ids=[1,2,3,4,5,6].map(i=>set[`slot_${i}_type_id`]);groups.set(canonicalTypeSignature(ids),[]);}
+    const groups=new Map();for(const set of this.db.prepare(contractImplantSetsSql()).all()){const ids=[1,2,3,4,5,6].map(i=>set[`slot_${i}_type_id`]);groups.set(canonicalTypeSignature(ids),[]);}
     const blueprints=new Set(this.db.prepare("SELECT DISTINCT r.blueprint_id FROM recipes r JOIN lp_exchange o ON o.type_id=r.blueprint_id WHERE o.is_blocked='N'").all().map(row=>row.blueprint_id));
     for(const id of blueprints)groups.set(`blueprint-copy:${id}`,[]);
     for(const header of this.db.prepare('SELECT raw_json FROM contracts').all()){

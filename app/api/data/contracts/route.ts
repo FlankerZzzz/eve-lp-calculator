@@ -1,6 +1,6 @@
 import { ensureBusinessSchema as ensureSchema } from "../../../../db/business";
 import { businessLpVisibility } from "../../../../lib/data-policy";
-import { visibleImplantSetsSql } from "../../../../scripts/v2/lp-policy.mjs";
+import { contractImplantSetsSql } from "../../../../scripts/v2/lp-policy.mjs";
 
 type ContractMatch = { contract_id: number; date_issued: string; date_expired: string; price: number; unit_price: number; set_count?: number; copy_count?: number; runs?: number; material_efficiency?: number; time_efficiency?: number; price_per_run?: number; start_location_id: number; end_location_id: number; solar_system_id?: number | null; location_name?: string };
 
@@ -40,7 +40,7 @@ export async function GET(request: Request) {
     if (typeIds.length !== 6) return Response.json({ error: "需要六个脑插类型" }, { status: 400 });
     {
       const slots = [1,2,3,4,5,6].map(slot => `s.slot_${slot}_type_id IN (${typeIds.map(() => '?').join(',')})`).join(' AND ');
-      const visible = await db.prepare(`SELECT 1 FROM implant_sets s WHERE s.set_id IN (${visibleImplantSetsSql()}) AND ${slots} LIMIT 1`).bind(...Array.from({length:6},() => typeIds).flat()).first();
+      const visible = await db.prepare(`SELECT 1 FROM (${contractImplantSetsSql()}) s WHERE ${slots} LIMIT 1`).bind(...Array.from({length:6},() => typeIds).flat()).first();
       if (!visible) return Response.json({ error: '未找到可公开的脑插兑换套装' }, { status: 404 });
     }
     const rawKey = typeIds.join(",");
