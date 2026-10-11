@@ -28,7 +28,7 @@ check("公开说明明确部署、数据持久化和隐私边界", async () => {
   const readme = await source("README.md");
   assert.match(readme, /新机器首次部署使用 `git clone`/u);
   assert.match(readme, /已有工作副本更新时才使用 `git pull --ff-only`/u);
-  assert.match(readme, /运行数据保存在 `docker-data\/sqlite\/`/u);
+  assert.match(readme, /运行数据保存在 `docker-data\/v2\/`/u);
   assert.match(readme, /军团收藏使用当前浏览器的本地存储/u);
   assert.match(readme, /不等同于用户身份认证/u);
   assert.match(readme, /不能直接替代 Docker 部署/u);

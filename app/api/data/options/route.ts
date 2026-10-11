@@ -1,11 +1,9 @@
-import { ensureSchema } from "../../../../db/d1";
-import { visibleCorporationSql, visibleOfferSql } from "../../../../lib/data-policy";
-
-const visibleCorporation = visibleCorporationSql("c");
-const visibleOffer = visibleOfferSql("o");
+import { ensureBusinessSchema as ensureSchema } from "../../../../db/business";
+import { businessLpVisibility } from "../../../../lib/data-policy";
 
 export async function GET() {
   const db = await ensureSchema();
+  const { corporation: visibleCorporation, offer: visibleOffer } = businessLpVisibility(true);
   const [factions, corporations, counts] = await Promise.all([
     db.prepare(`SELECT DISTINCT f.faction_id, f.name FROM factions f JOIN corporations c ON c.faction_id=f.faction_id JOIN lp_offers o ON o.corporation_id=c.corporation_id WHERE ${visibleCorporation} AND ${visibleOffer} ORDER BY f.name`).all(),
     db.prepare(`SELECT c.corporation_id, c.faction_id, c.name, COUNT(o.offer_id) AS offer_count FROM corporations c JOIN lp_offers o ON o.corporation_id=c.corporation_id WHERE ${visibleCorporation} AND ${visibleOffer} GROUP BY c.corporation_id, c.faction_id, c.name ORDER BY c.name`).all(),

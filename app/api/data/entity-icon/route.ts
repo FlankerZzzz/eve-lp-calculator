@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const CACHE_ROOT = process.env.ENTITY_ICON_CACHE_PATH || "/data/entity-icons";
+const CACHE_ROOT = process.env.ENTITY_ICON_CACHE_PATH || "/v2/entity-icons";
 const SERENITY_IMAGE_BASE = process.env.SERENITY_IMAGE_BASE_URL || "https://image.evepc.163.com";
 const IMAGE_BASE = process.env.EVE_IMAGE_BASE_URL || "https://images.evetech.net";
 const CACHE_VERSION = "v4";

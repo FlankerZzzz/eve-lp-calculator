@@ -42,3 +42,19 @@ export function visibleOfferSql(alias = "o") {
 export function excludedOfferSql(alias = "o") {
   return `COALESCE(${alias}.ak_cost, 0) > 0`;
 }
+
+// Legacy defaults are used once when a V2 LP row is first created; V2 reads its maintained flags.
+export const HIGH_SEC_FACTION_IDS = new Set([500001, 500002, 500003, 500004, 500007, 500008, 500015, 500016]);
+export const HIGH_SEC_EXCLUDED_CORPORATION_IDS = new Set([1000179, 1000180, 1000181, 1000182]);
+export function isHighSecCorporation(corporationId: number, factionId: number | null | undefined) {
+  return factionId != null && HIGH_SEC_FACTION_IDS.has(factionId) && !HIGH_SEC_EXCLUDED_CORPORATION_IDS.has(corporationId);
+}
+export function initialLpFlags(corporationId: number, factionId: number | null | undefined, akCost: number | null | undefined) {
+  return { is_high_sec: isHighSecCorporation(corporationId, factionId) ? 'Y' : 'N', is_blocked: isGloballyExcludedOffer(corporationId, factionId, akCost) ? 'Y' : 'N' };
+}
+export function businessLpVisibility(v2: boolean) {
+  return {
+    corporation: v2 ? "EXISTS (SELECT 1 FROM lp_offers policy WHERE policy.corporation_id=c.corporation_id AND policy.is_blocked='N')" : visibleCorporationSql('c'),
+    offer: v2 ? "o.is_blocked='N'" : visibleOfferSql('o'),
+  };
+}

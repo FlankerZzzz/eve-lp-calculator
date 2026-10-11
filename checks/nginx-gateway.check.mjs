@@ -25,7 +25,9 @@ check("同步页面和同步 API 都经过私有地址检查", () => {
   assert.match(nginx, /location = \/sync[\s\S]*?return 403;/);
   assert.match(nginx, /location \^~ \/api\/sync\/[\s\S]*?return 403;/);
   assert.match(nginx, /location \^~ \/api\/sync\/[\s\S]*?proxy_set_header X-Sync-Internal-Token "";/);
-  assert.match(compose, /SYNC_INTERNAL_TOKEN:/);
+  assert.match(nginx, /location = \/sync-v2 \{[\s\S]*?return 403;/);
+  assert.match(nginx, /location \^~ \/api\/v2\/ \{[\s\S]*?return 403;[\s\S]*?proxy_set_header X-Sync-Internal-Token "";/);
+  assert.doesNotMatch(compose, /SYNC_INTERNAL_TOKEN:/);
   assert.match(compose, /SYNC_ADMIN_TOKEN:/);
 });
 

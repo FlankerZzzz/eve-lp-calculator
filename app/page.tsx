@@ -1,6 +1,8 @@
 "use client";
 
 import { type Dispatch, type ReactNode, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { HIGH_SEC_FACTION_IDS, HIGH_SEC_EXCLUDED_CORPORATION_IDS } from '../lib/data-policy';
+import { contractPayment } from '../lib/contract-analysis';
 
 type SortKey = "lp_cost" | "isk_cost" | "materialCost" | "sell_price" | "buy_price" | "maxProfit" | "minProfit" | "lpRatio" | "volume";
 type SortDirection = "asc" | "desc";
@@ -25,6 +27,7 @@ type Counts = { corporations: number; items: number; offers: number; history_row
 type Material = { type_id: number; quantity: number; item_name: string; buy_price: number; sell_price: number; sell_available_volume?: number; material_kind?: string; historical_prices?: HistoryPrices; sell_execution_price?: number; sell_execution_coverage?: number };
 type StoredOffer = {
   corporation_id: number; offer_id: number; type_id: number; quantity: number; lp_cost: number; isk_cost: number;
+  is_high_sec?: 'Y' | 'N'; is_blocked?: 'Y' | 'N';
   corporation_name: string; faction_id: number | null; faction_name: string | null; item_name: string;
   historical_price: number; historical_prices?: HistoryPrices; daily_volume: number; daily_volumes?: DailyVolumePoint[]; buy_price: number; sell_price: number; buy_execution_price?: number; buy_execution_coverage?: number; materials: Material[];
   is_blueprint: number; product_type_id: number | null; product_name: string | null; revenue_quantity: number;
@@ -33,10 +36,10 @@ type CalculatedMaterial = Material & { unitPrice: number; cost: number; historyU
 type CalculatedOffer = StoredOffer & { materialCost: number; unitPrice: number; netRevenue: number; profit: number; historyProfit: number | null; historyLpRatio: number | null; historyDeviation: number | null; maxProfit: number | null; minProfit: number | null; lpRatio: number; volume: number; materialsCovered: boolean; outputCovered: boolean; outputPrice: number; outputPriceSource: "buy" | "expected" | "sell" | "missing"; calculatedMaterials: CalculatedMaterial[] };
 type OptimizationLine = { offer: CalculatedOffer; count: number };
 type OptimizationResult = { lines: OptimizationLine[]; usedLp: number; remainingLp: number; totalProfit: number; lpRatio: number; exact: boolean };
-type MarketOrderLevel = { side: "buy" | "sell"; level: number; price: number; volume: number };
+type MarketOrderLevel = { side: "buy" | "sell"; level: number; price: number; volume: number; location_name?: string };
 type MarketHistoryDay = { trade_date: string; average_price: number; highest_price: number; lowest_price: number; volume: number };
 type MarketOrderSnapshot = { type_id: number; item_name: string; buy_price: number | null; sell_price: number | null; buy_volume: number | null; sell_volume: number | null; collected_at: string | null; buy_levels: MarketOrderLevel[]; sell_levels: MarketOrderLevel[]; history: MarketHistoryDay[]; history_summary: { days: number; total_volume: number; weighted_average: number | null } };
-type ContractMatch = { contract_id: number; date_issued: string; date_expired: string; price: number; unit_price: number; set_count: number; start_location_id: number; end_location_id: number; location_name?: string; solar_system_id?: number | null };
+type ContractMatch = { contract_id: number; date_issued: string; date_expired: string; price: number; unit_price: number | null; payment_type?: 'ISK' | 'PLEX'; plex_quantity?: number; set_count: number; start_location_id: number; end_location_id: number; location_name?: string; solar_system_id?: number | null };
 type ContractState = { loading: boolean; contracts: ContractMatch[]; stale?: boolean; fetchedAt?: string | null; error?: string };
 type BlueprintContractMatch = ContractMatch & { copy_count?: number; runs?: number | null; material_efficiency?: number | null; time_efficiency?: number | null; price_per_run?: number | null };
 type BlueprintContractState = Omit<ContractState, "contracts"> & { contracts: BlueprintContractMatch[]; status?: string };
@@ -54,16 +57,13 @@ function implantMaterialRequirements(set: ImplantSet, setCount: number): Implant
   return [...totals.values()].map(material => ({ ...material, missing: Math.max(0, material.required - material.available) }));
 }
 const MAX_CALCULATION_LP = 99_990_000;
-const APP_VERSION = "V1.12.1";
+const APP_VERSION = "V2.0.0";
 const LP_STORAGE_KEY = "eve-lp-calculator:lp";
 const OPTIMIZATION_STORAGE_KEY = "eve-lp-calculator:optimization";
 const FAVORITE_CORPORATIONS_STORAGE_KEY = "eve-lp-calculator:favorite-corporations";
-const HIGH_SEC_FACTION_IDS = new Set([500001, 500002, 500003, 500004, 500007, 500008, 500015, 500016]);
-const HIGH_SEC_EXCLUDED_CORPORATION_IDS = new Set([
-  1000179, 1000180, 1000181, 1000182,
-]);
 
 function isHighSecOffer(offer: StoredOffer) {
+  if (offer.is_high_sec !== undefined) return offer.is_high_sec === 'Y';
   return offer.faction_id !== null
     && HIGH_SEC_FACTION_IDS.has(offer.faction_id)
     && !HIGH_SEC_EXCLUDED_CORPORATION_IDS.has(offer.corporation_id);
@@ -569,7 +569,7 @@ export default function Home() {
     if (absolute >= 1000) return `${sign}${unit(1000)} 千`;
     return `${sign}${unit(1)}`;
   };
-  const ContractPrice = ({ value, unit = "套" }: { value: number; unit?: string }) => <strong className="contract-price">{formatNumber(value)} ISK/{unit}<small>约 {magnitudeHint(value)} ISK/{unit}</small></strong>;
+  const ContractPrice = ({ value, unit = "套", currency="ISK" }: { value: number | null; unit?: string; currency?: string }) => <strong className="contract-price">{value===null?"暂无价格":`${formatNumber(value, currency==='PLEX'?2:0)} ${currency}/${unit}`}<small>{value===null?"支付价格待确认":currency==='PLEX'?"纯 PLEX 支付，不折算 ISK":`约 ${magnitudeHint(value)} ISK/${unit}`}</small></strong>;
   const toggleMaterials = (key: string, blueprintTypeId?: number) => {
     const opening = !expandedOffers.has(key);
     setExpandedOffers(current => {
@@ -597,7 +597,7 @@ export default function Home() {
           const totalRuns = contract.runs ? contract.runs * copyCount : null;
           const redemptionQuantity = Math.max(1, offer.quantity);
           const exchangeMaterialCost = offer.calculatedMaterials.filter(material => material.material_kind !== "制造材料").reduce((sum, material) => sum + material.cost, 0);
-          const contractReferenceRatio = offer.lp_cost > 0 ? (contract.unit_price * redemptionQuantity - offer.isk_cost - exchangeMaterialCost) / offer.lp_cost : null;
+          const contractReferenceRatio = offer.lp_cost > 0 && contract.unit_price!==null ? (contract.unit_price * redemptionQuantity - offer.isk_cost - exchangeMaterialCost) / offer.lp_cost : null;
           const mailUrl = `<url=contract:${contract.solar_system_id || 30000142}//${contract.contract_id}>${offer.item_name}</url>`;
           return <div key={contract.contract_id}>
             <ContractPrice value={contract.unit_price} unit="张" />
@@ -664,7 +664,7 @@ export default function Home() {
     const pageCount = Math.max(1, Math.ceil(levels.length / orderPageSize));
     const safePage = Math.min(currentPage, pageCount);
     const visibleLevels = levels.slice((safePage - 1) * orderPageSize, safePage * orderPageSize);
-    return <div key={side}><small>{side === "buy" ? "当前收单 · 价格从高到低" : "当前卖单 · 价格从低到高"}</small><div className="order-level-head"><span>档位</span><span>价格</span><span>数量</span></div><div className="order-level-list">{visibleLevels.length ? visibleLevels.map(level => <div key={level.level}><i>{level.level}</i><b>{formatNumber(level.price)} ISK</b><span>{formatNumber(level.volume)} 个</span></div>) : <p>暂无订单数据，请重新同步当前订单</p>}</div><div className="order-pagination"><span>共 {levels.length} 档 · 第 {safePage}/{pageCount} 页</span><button type="button" disabled={safePage <= 1} onClick={() => setCurrentPage(value => Math.max(1, value - 1))}>上一页</button><button type="button" disabled={safePage >= pageCount} onClick={() => setCurrentPage(value => Math.min(pageCount, value + 1))}>下一页</button></div></div>;
+    return <div key={side}><small>{side === "buy" ? "当前收单 · 价格从高到低" : "当前卖单 · 价格从低到高"}</small><div className="order-level-head"><span>档位</span><span>价格</span><span>数量</span><span>空间站</span></div><div className="order-level-list">{visibleLevels.length ? visibleLevels.map(level => <div key={`${level.level}-${level.location_name}`}><i>{level.level}</i><b>{formatNumber(level.price)} ISK</b><span>{formatNumber(level.volume)} 个</span><small>{level.location_name || "未知地点"}</small></div>) : <p>暂无订单数据，请重新同步当前订单</p>}</div><div className="order-pagination"><span>共 {levels.length} 档 · 第 {safePage}/{pageCount} 页</span><button type="button" disabled={safePage <= 1} onClick={() => setCurrentPage(value => Math.max(1, value - 1))}>上一页</button><button type="button" disabled={safePage >= pageCount} onClick={() => setCurrentPage(value => Math.min(pageCount, value + 1))}>下一页</button></div></div>;
   };
   const corporationCalculator = <><section className="control-card compact corporation-calculator"><div className="control-title"><span className="step">01</span><div><b>LP计算器</b><p>使用全部兑换方案计算，不受当前分页影响</p></div></div><label className="amount-label">可用 LP <div className="amount-field"><input type="text" inputMode="numeric" value={formatNumber(lp)} onChange={event => setLp(Math.max(0, Number(event.target.value.replace(/[^0-9]/g, "")) || 0))} /><small>{magnitudeHint(lp)}</small></div><span>LP</span></label><label>需求材料 <strong className="fixed-value">卖单价</strong></label><label>产出物 <strong className="fixed-value">收单价</strong></label><label>交易税 <input type="number" min="0" max="100" value={tax} onChange={event => setTax(Number(event.target.value))} /><span>%</span></label><button className="calculate-button" disabled={optimizing || lp <= 0} onClick={optimizeCorporation}>{optimizing ? "正在计算…" : "计算最优组合"}</button></section>{optimization && <section className="optimization-result"><div className="optimization-summary"><div><small>预计税后总利润</small><strong>{formatNumber(optimization.totalProfit)} ISK</strong><em>{magnitudeHint(optimization.totalProfit)} ISK</em></div><div><small>总体 LP 比例</small><strong>{formatNumber(optimization.lpRatio)} ISK/LP</strong><em>税后净利润 ÷ 已使用 LP</em></div><div><small>已使用 LP</small><b>{formatNumber(optimization.usedLp)}</b><em>{magnitudeHint(optimization.usedLp)} LP</em></div><div><small>剩余 LP</small><b>{formatNumber(optimization.remainingLp)}</b><em>{magnitudeHint(optimization.remainingLp)} LP</em></div><span>{optimization.exact ? "精确组合" : "大额 LP：尾部精确优化"}</span></div><div className="optimization-lines">{optimization.lines.map(line => <div key={line.offer.offer_id}><strong className="icon-label"><ItemIcon typeId={line.offer.type_id} name={line.offer.item_name} />{line.offer.item_name}</strong><b>× {formatNumber(line.count)}</b><span>消耗 {formatNumber(line.offer.lp_cost * line.count)} LP<small>{magnitudeHint(line.offer.lp_cost * line.count)}</small></span><span>利润 {formatNumber(line.offer.minProfit! * line.count)} ISK<small>{magnitudeHint(line.offer.minProfit! * line.count)}</small></span></div>)}</div></section>}</>;
   const implantExchangeRows = implantSets.map(set => ({ set, count: set.total_lp > 0 ? Math.floor(lp / set.total_lp) : 0 })).filter(({ count }) => count > 0);
@@ -687,7 +687,7 @@ export default function Home() {
   </section> : null;
 
   const riskAwareImplantSetPanel = implantSets.length ? <section className="implant-sets">
-    <div><p className="eyebrow">特殊商品</p><h3>六件套脑插市场价</h3><span>完整 Alpha–Omega 六件套，卖单缺失时采用近期历史价；收单仅作立即出售参考</span></div>
+    <div><p className="eyebrow">特殊商品</p><h3>六件套脑插市场价</h3><span>LP 比例优先按当前收单计算，不考虑收单数量；缺少收单时回落 30 天历史价</span></div>
     {implantSets.map(set => {
       const setKey = `${set.name}:${set.is_blueprint ? "blueprint" : "direct"}`;
       const expanded = expandedImplantSets.has(setKey);
@@ -695,7 +695,6 @@ export default function Home() {
       const contractsExpanded = expandedImplantContracts.has(setKey);
       const setMaterialShortages = implantMaterialRequirements(set, 1).filter(material => material.missing > 0);
       const setRedemptionCost = set.items.reduce((sum, item) => sum + item.isk_cost + item.material_cost, 0);
-      const historicalPriceItems = set.items.filter(item => item.price_source === "expected");
       const missingPriceItems = set.items.filter(item => item.price_source === "missing");
       const sellPricedCount = set.items.filter(item => item.sell_price > 0).length;
       const buyPricedCount = set.items.filter(item => item.buy_price > 0).length;
@@ -703,19 +702,24 @@ export default function Home() {
       const buyPricesComplete = buyPricedCount === set.item_count;
       const setBuyTotal = set.items.reduce((sum, item) => sum + (item.buy_price || 0), 0);
       const setSellTotal = set.items.reduce((sum, item) => sum + (item.sell_price || 0), 0);
-      return <div className={`implant-set${setMaterialShortages.length ? " material-shortage" : ""}${historicalPriceItems.length || missingPriceItems.length ? " price-shortage" : ""}`} key={setKey}>
-        <div className="implant-set-title"><button type="button" className="expand-mark implant-set-toggle" aria-expanded={expanded} onClick={() => setExpandedImplantSets(value => { const next = new Set(value); if (next.has(setKey)) next.delete(setKey); else next.add(setKey); return next; })}>{expanded ? "−" : "+"}</button><strong>{set.name}套{set.is_blueprint ? "(蓝图)" : ""}（6件）</strong>{setMaterialShortages.length > 0 && <i className="coverage-alert">检查材料</i>}{missingPriceItems.length > 0 ? <i className="coverage-alert">可靠价格 {set.priced_count}/{set.item_count}</i> : historicalPriceItems.length > 0 && <i className="coverage-alert">含历史估值 {historicalPriceItems.length} 件</i>}</div>
+      return <div className={`implant-set${setMaterialShortages.length ? " material-shortage" : ""}${missingPriceItems.length ? " price-shortage" : ""}`} key={setKey}>
+        <div className="implant-set-title"><button type="button" className="expand-mark implant-set-toggle" aria-expanded={expanded} onClick={() => setExpandedImplantSets(value => { const next = new Set(value); if (next.has(setKey)) next.delete(setKey); else next.add(setKey); return next; })}>{expanded ? "−" : "+"}</button><strong>{set.name}套{set.is_blueprint ? "(蓝图)" : ""}（6件）</strong>{setMaterialShortages.length > 0 && <i className="coverage-alert">检查材料</i>}{missingPriceItems.length > 0 && <i className="coverage-alert">收单完整度 {set.priced_count}/{set.item_count}</i>}</div>
         {expanded && <>
           <div className="implant-levels">{set.items.map((item, index) => {
             const itemKey = `${setKey}:${item.level}`;
             const itemExpanded = expandedImplantItems.has(itemKey);
             const materialShortages = (item.materials ?? []).filter(material => (material.sell_available_volume ?? 0) < material.quantity);
-            const itemRisk = materialShortages.length > 0 || item.price_source !== "sell";
-            const priceHint = item.price_source === "expected" ? "无卖单 · 采用历史估值" : item.price_source === "missing" ? "无卖单及历史成交 · 不采用收单估值" : "";
+            const itemRisk = materialShortages.length > 0 || item.price_source !== "buy";
+            const priceHint = item.price_source === "expected" ? "无收单 · 采用历史估值" : item.price_source === "missing" ? "无收单及历史成交 · 不参与 LP 比例" : "";
             return <div className={itemRisk ? "implant-item-risk" : ""} key={item.level}><i>{index + 1}</i><ItemIcon typeId={item.type_id} name={item.name} /><span>{item.name}{materialShortages.length > 0 && <small className="material-warning">材料不足</small>}{priceHint && <small className="material-warning">{priceHint}</small>}</span><b>{item.valuation_price > 0 ? `${formatNumber(item.valuation_price)} ISK` : "无可靠价格"}</b><em>{formatNumber(item.lp_cost)} LP</em><button className="market-order-link" onClick={event => openMarket({ typeId: item.market_type_id || item.type_id, name: item.name }, event.currentTarget)}>市场订单</button><button type="button" className="market-order-link material-toggle" aria-expanded={itemExpanded} onClick={() => setExpandedImplantItems(value => { const next = new Set(value); if (next.has(itemKey)) next.delete(itemKey); else next.add(itemKey); return next; })}>材料</button>{itemExpanded && <div className="implant-item-materials">{item.materials?.length ? item.materials.map(material => { const available = material.sell_available_volume ?? 0; const missing = Math.max(0, material.quantity - available); return <span className={missing > 0 ? "material-missing" : ""} key={material.type_id}>{material.item_name}：需要 {formatNumber(material.quantity)}，现有卖单 {formatNumber(available)}{missing > 0 ? `，缺少 ${formatNumber(missing)}` : "，充足"}</span>; }) : <span>该脑插不需要额外材料</span>}</div>}</div>;
           })}</div>
-          <div className="implant-total"><div><span>套装市场卖价</span><strong>{sellPricesComplete ? `${formatNumber(setSellTotal)} ISK` : `数据不完整（${sellPricedCount}/${set.item_count}）`}<small>{sellPricesComplete ? `约 ${magnitudeHint(setSellTotal)} ISK` : `缺少 ${set.item_count - sellPricedCount} 件卖单，未合计`}</small></strong></div><div><span>套装市场收单价</span><strong>{buyPricesComplete ? `${formatNumber(setBuyTotal)} ISK` : `数据不完整（${buyPricedCount}/${set.item_count}）`}<small>{buyPricesComplete ? `约 ${magnitudeHint(setBuyTotal)} ISK · 仅作立即出售参考` : `缺少 ${set.item_count - buyPricedCount} 件收单，未合计`}</small></strong></div><div className="implant-total-lp"><span>总计 LP</span><strong>{formatNumber(set.total_lp)} LP<small>约 {magnitudeHint(set.total_lp)} LP</small></strong></div><div className="implant-total-ratio"><span>LP 比例</span><strong>{set.lp_ratio === null ? "—" : `${formatNumber(set.lp_ratio)} ISK/LP`}<small>{set.lp_ratio === null ? `可靠价格不完整（${set.priced_count}/${set.item_count}）` : "按卖单/历史估值扣除税费和成本计算"}</small></strong></div></div>
-          <div className="implant-contracts"><div className="implant-contract-head"><span>公开合同价格</span><button type="button" className="expand-mark implant-set-toggle" aria-expanded={contractsExpanded} onClick={() => setExpandedImplantContracts(value => { const next = new Set(value); if (next.has(setKey)) next.delete(setKey); else next.add(setKey); return next; })}>{contractsExpanded ? "−" : "+"}</button></div>{contractState?.stale && <p className="contract-stale-warning">合同缓存已过期，以下为上次成功数据{contractState.fetchedAt ? ` · ${new Date(contractState.fetchedAt).toLocaleString("zh-CN")}` : ""}</p>}{contractState?.loading ? <p>正在查询公开合同…</p> : contractState?.contracts.length ? <div className="implant-contract-list">{contractState.contracts.slice(0, contractsExpanded ? 10 : 1).map(contract => { const contractReferenceRatio = set.total_lp > 0 ? (contract.unit_price - setRedemptionCost) / set.total_lp : null; const mailUrl = `<url=contract:${contract.solar_system_id || 30000142}//${contract.contract_id}>${set.name}套</url>`; return <div key={contract.contract_id}><ContractPrice value={contract.unit_price} /><span className="implant-contract-ratio"><b>{contractReferenceRatio === null ? "—" : formatNumber(contractReferenceRatio)}</b><small>ISK/LP · 合同参考比例</small></span><button type="button" className="contract-copy-link" onClick={async () => { const copied = await copyText(mailUrl); window.alert(copied ? "邮件 URL 已复制，请粘贴至邮件使用" : `自动复制失败，请手动复制：\n${mailUrl}`); }}>{set.name}套</button><span>{contract.set_count > 1 ? `×${contract.set_count}套 / 每套 ${formatNumber(contract.unit_price)} ISK` : "六件套"}</span><small>{contract.location_name || `空间站 #${contract.start_location_id}`} · 合同 #{contract.contract_id}</small></div>; })}</div> : <p>{contractState?.error || "暂无符合条件的公开六件套合同"}</p>}</div>
+          <div className="implant-total"><div><span>套装市场卖价</span><strong>{sellPricesComplete ? `${formatNumber(setSellTotal)} ISK` : `数据不完整（${sellPricedCount}/${set.item_count}）`}<small>{sellPricesComplete ? `约 ${magnitudeHint(setSellTotal)} ISK` : `缺少 ${set.item_count - sellPricedCount} 件卖单，未合计`}</small></strong></div><div><span>套装市场收单价</span><strong>{buyPricesComplete ? `${formatNumber(setBuyTotal)} ISK` : `数据不完整（${buyPricedCount}/${set.item_count}）`}<small>{buyPricesComplete ? `约 ${magnitudeHint(setBuyTotal)} ISK · LP 比例优先采用此价` : `缺少 ${set.item_count - buyPricedCount} 件收单，缺少时回落历史价`}</small></strong></div><div className="implant-total-lp"><span>总计 LP</span><strong>{formatNumber(set.total_lp)} LP<small>约 {magnitudeHint(set.total_lp)} LP</small></strong></div><div className="implant-total-ratio"><span>LP 比例</span><strong>{set.lp_ratio === null ? "—" : `${formatNumber(set.lp_ratio)} ISK/LP`}<small>{set.lp_ratio === null ? `收单和历史价均不完整（${set.priced_count}/${set.item_count}）` : "按收单价，缺少时回落历史估值，扣除税费和成本"}</small></strong></div></div>
+          <div className="implant-contracts"><div className="implant-contract-head"><span>公开合同价格</span><button type="button" className="expand-mark implant-set-toggle" aria-expanded={contractsExpanded} onClick={() => setExpandedImplantContracts(value => { const next = new Set(value); if (next.has(setKey)) next.delete(setKey); else next.add(setKey); return next; })}>{contractsExpanded ? "−" : "+"}</button></div>{contractState?.stale && <p className="contract-stale-warning">合同缓存已过期，以下为上次成功数据{contractState.fetchedAt ? ` · ${new Date(contractState.fetchedAt).toLocaleString("zh-CN")}` : ""}</p>}{contractState?.loading ? <p>正在查询公开合同…</p> : contractState?.contracts.length ? <div className="implant-contract-list">{contractState.contracts.slice(0, contractsExpanded ? 10 : 1).map(contract => {
+            const payment=contractPayment(contract);
+            const contractReferenceRatio = payment.currency==='ISK'&&payment.value!==null&&set.total_lp>0 ? (payment.value-setRedemptionCost)/set.total_lp : null;
+            const mailUrl = `<url=contract:${contract.solar_system_id || 30000142}//${contract.contract_id}>${set.name}套</url>`;
+            return <div key={contract.contract_id}><ContractPrice value={payment.value} currency={payment.currency}/><span className="implant-contract-ratio"><b>{contractReferenceRatio===null?"—":formatNumber(contractReferenceRatio)}</b><small>{payment.currency==='PLEX'?"PLEX 支付 · 不计算 ISK/LP":"ISK/LP · 合同参考比例"}</small></span><button type="button" className="contract-copy-link" onClick={async()=>{const copied=await copyText(mailUrl);window.alert(copied?"邮件 URL 已复制，请粘贴至邮件使用":`自动复制失败，请手动复制：\n${mailUrl}`);}}>{set.name}套</button><span>{contract.set_count>1?`×${contract.set_count}套 / 每套 ${payment.value===null?'待确认':formatNumber(payment.value,2)} ${payment.currency}`:"六件套"}</span><small>{contract.location_name||`空间站 #${contract.start_location_id}`} · 合同 #{contract.contract_id}</small></div>;
+          })}</div>:<p>{contractState?.error||"暂无符合条件的公开六件套合同"}</p>}</div>
         </>}
       </div>;
     })}

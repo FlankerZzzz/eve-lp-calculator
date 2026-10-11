@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "./pagination.css";
+import ToolSidebar from "./tool-sidebar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "晨曦服 LP 兑换收益分析",
-  description: "基于晨曦服市场订单、历史成交与忠诚点商店数据的 LP 兑换收益分析工具。",
+  title: "晨曦服舰桥工具箱",
+  description: "晨曦服 LP 兑换、公开合同与市场数据分析工具箱。",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
@@ -32,7 +33,10 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <ToolSidebar />
+        <div className="tool-workspace">
+          {children}
+        </div>
       </body>
     </html>
   );

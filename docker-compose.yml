@@ -5,6 +5,11 @@ services:
     image: eve-lp-calculator-nginx
     container_name: eve-lp-nginx
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "42981:42981"
     depends_on:
@@ -26,21 +31,21 @@ services:
         HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
     container_name: eve-lp-web
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     command: ["node", "scripts/web.mjs"]
     expose:
       - "3000"
     environment:
       ESI_BASE_URL: https://ali-esi.evepc.163.com
-      SQLITE_RUNTIME: "1"
-      SQLITE_PATH: /data/eve-lp.db
-      SYNC_INTERNAL_TOKEN: ${SYNC_INTERNAL_TOKEN:-eve-lp-internal-sync-v1}
+      V2_SQLITE_PATH: /v2/eve-v2.db
+      V2_LOG_PATH: /v2/logs
       SYNC_ADMIN_TOKEN: ${SYNC_ADMIN_TOKEN:-}
-      WRANGLER_WRITE_LOGS: "false"
-      WRANGLER_LOG_PATH: /app/.wrangler/logs
-      MINIFLARE_REGISTRY_PATH: /app/.wrangler/registry
     volumes:
-      - ./docker-data/wrangler:/app/.wrangler
-      - ./docker-data/sqlite:/data
+      - ./docker-data/v2:/v2
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 10s
@@ -55,20 +60,27 @@ services:
     image: eve-lp-calculator-eve-lp-calculator
     container_name: eve-lp-sync
     restart: unless-stopped
-    command: ["node", "scripts/sync-daemon.mjs"]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    command: ["node", "scripts/v2/worker.mjs"]
     environment:
-      SYNC_BASE_URL: http://web:3000
-      SQLITE_RUNTIME: "1"
-      SQLITE_PATH: /data/eve-lp.db
+      V2_SQLITE_PATH: /v2/eve-v2.db
+      V2_LOG_PATH: /v2/logs
+      V2_REQUEST_RATE: "5"
+      V2_REQUEST_CONCURRENCY: "8"
+      V2_HISTORY_REQUEST_RATE: "1"
+      V2_HISTORY_REQUEST_CONCURRENCY: "2"
       ESI_BASE_URL: https://ali-esi.evepc.163.com
-      SYNC_INTERNAL_TOKEN: ${SYNC_INTERNAL_TOKEN:-eve-lp-internal-sync-v1}
     volumes:
-      - ./docker-data/sqlite:/data
+      - ./docker-data/v2:/v2
     depends_on:
       web:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "const { DatabaseSync } = require('node:sqlite'); const db = new DatabaseSync('/data/eve-lp.db'); const row = db.prepare('SELECT heartbeat_at FROM contract_sync_state WHERE id=1').get(); db.close(); if (!row?.heartbeat_at || Date.now() - Date.parse(row.heartbeat_at) > 300000) process.exit(1); fetch('http://web:3000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1));"]
+      test: ["CMD", "node", "--input-type=module", "-e", "import {DatabaseSync} from 'node:sqlite';const d=new DatabaseSync(process.env.V2_SQLITE_PATH,{readOnly:true});const r=d.prepare(\"SELECT value FROM runtime_state WHERE key='worker'\").get();d.close();const w=r?JSON.parse(r.value):null;if(!w||Date.now()-w.heartbeat>30000)process.exit(1)"]
       interval: 20s
       timeout: 5s
       retries: 3

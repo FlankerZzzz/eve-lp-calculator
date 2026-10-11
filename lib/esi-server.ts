@@ -106,15 +106,3 @@ export function summarizeOrders(orders: MarketOrder[]) {
     sellLevels: levels(sells, "asc"),
   };
 }
-
-export function orderLevelStatements(db: D1Database, typeId: number, summary: ReturnType<typeof summarizeOrders>, collectedAt: string) {
-  return [
-    db.prepare("DELETE FROM market_order_levels WHERE region_id=? AND type_id=?").bind(MARKET_REGION_ID, typeId),
-    ...summary.buyLevels.map(item => db.prepare("INSERT INTO market_order_levels (region_id, type_id, side, level, price, volume, collected_at) VALUES (?, ?, 'buy', ?, ?, ?, ?)").bind(MARKET_REGION_ID, typeId, item.level, item.price, item.volume, collectedAt)),
-    ...summary.sellLevels.map(item => db.prepare("INSERT INTO market_order_levels (region_id, type_id, side, level, price, volume, collected_at) VALUES (?, ?, 'sell', ?, ?, ?, ?)").bind(MARKET_REGION_ID, typeId, item.level, item.price, item.volume, collectedAt)),
-  ];
-}
-
-export async function batchStatements(db: D1Database, statements: D1PreparedStatement[], size = 80) {
-  for (let index = 0; index < statements.length; index += size) await db.batch(statements.slice(index, index + size));
-}

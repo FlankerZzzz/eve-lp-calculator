@@ -16,13 +16,6 @@ check("最大利润保留最低卖单参考，最小利润按产出数量逐档�
   assert.match(esi, /sellPrice: sells\.length \? Math\.min/);
 });
 
-check("首页只读取每日固定榜单快照", async () => {
-  const [page, route, worker] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts"), source("scripts/sync-worker.mjs")]);
-  assert.match(page, /热销榜/);
-  assert.match(route, /FROM ranking_snapshots/);
-  assert.match(worker, /rebuildRankings/);
-  assert.doesNotMatch(route, /ORDER BY daily_volume DESC, lp_ratio DESC LIMIT 5/);
-});
 
 check("兑换方案物品信息不显示由 LP 输入推算的可兑换次数", async () => {
   const page = await source("app/page.tsx");
@@ -40,54 +33,9 @@ check("订单深度不足时保留利润估算并显示材料与收单风险", a
   assert.match(page, /outputCoverageWarning\(offer\)/);
 });
 
-check("订单使用伏尔戈全量双槽快照并按半小时调度", async () => {
-  const [daemon, worker, schema] = await Promise.all([source("scripts/order-sync-daemon.mjs"), source("scripts/sync-worker.mjs"), source("db/d1.ts")]);
-  assert.match(daemon, /order_type=all&page=\$\{page\}/);
-  assert.doesNotMatch(daemon, /orders\/\?[^`\n]*type_id=/);
-  assert.match(daemon, /JITA_44_LOCATION_ID = 60003760/);
-  assert.match(daemon, /PAGE_CONCURRENCY = 8/);
-  assert.match(daemon, /market_order_book_state/);
-  assert.match(daemon, /保留上一份完整快照并自动重试/);
-  assert.match(worker, /function halfHourSlotKey/);
-  assert.match(worker, /orderRunSlot !== currentOrderSlot/);
-  assert.match(schema, /CREATE TABLE IF NOT EXISTS market_order_book/);
-});
 
-check("后台同步服务由单一容器和单一 Node 进程承载", async () => {
-  const [compose, daemon, worker, order, contracts] = await Promise.all([
-    source("docker-compose.yml"),
-    source("scripts/sync-daemon.mjs"),
-    source("scripts/sync-worker.mjs"),
-    source("scripts/order-sync-daemon.mjs"),
-    source("scripts/contract-sync-daemon.mjs"),
-  ]);
-  assert.match(compose, /\n  sync:\n/);
-  assert.match(compose, /container_name: eve-lp-sync/);
-  assert.match(compose, /command: \["node", "scripts\/sync-daemon\.mjs"\]/);
-  assert.match(compose, /SYNC_BASE_URL: http:\/\/web:3000/);
-  assert.doesNotMatch(compose, /\n  sync-worker:|\n  sync-api:|\n  order-sync:|\n  contract-sync:/);
-  assert.match(daemon, /runSyncWorker\(\)/);
-  assert.match(daemon, /runOrderSyncDaemon\(\)/);
-  assert.match(daemon, /runContractSyncDaemon\(\)/);
-  assert.match(daemon, /Promise\.all/);
-  assert.match(worker, /export async function runSyncWorker/);
-  assert.match(order, /export async function runOrderSyncDaemon/);
-  assert.match(contracts, /export async function runContractSyncDaemon/);
-});
 
-check("榜单按上海时间每日四次更新", async () => {
-  const rankings = await source("app/api/sync/rankings/route.ts");
-  assert.match(rankings, /RANKING_HOURS = \[9, 15, 18, 21\]/);
-  assert.match(rankings, /dueRankingSlot/);
-  assert.match(rankings, /本时段榜单已更新/);
-});
 
-check("同步控制台不再提供关联同步", async () => {
-  const [page, control, status] = await Promise.all([source("app/sync/page.tsx"), source("app/api/sync/control/route.ts"), source("app/api/sync/status/route.ts")]);
-  assert.doesNotMatch(page, /linked|关联同步|SQLite\/D1/);
-  assert.doesNotMatch(control, /linked/);
-  assert.match(status, /kind != 'linked'/);
-});
 
 check("首页两个榜单使用独立且可切换的排序状态", async () => {
   const page = await source("app/page.tsx");
@@ -102,40 +50,17 @@ check("首页两个榜单使用独立且可切换的排序状态", async () => {
 });
 
 check("精选榜单支持仅展示可在高安执行任务的势力", async () => {
-  const page = await source("app/page.tsx");
-  assert.match(page, /HIGH_SEC_FACTION_IDS = new Set\(\[500001, 500002, 500003, 500004, 500007, 500008, 500015, 500016\]\)/);
+  const [page, policy] = await Promise.all([source("app/page.tsx"), source("lib/data-policy.ts")]);
+  assert.match(policy, /HIGH_SEC_FACTION_IDS = new Set\(\[500001, 500002, 500003, 500004, 500007, 500008, 500015, 500016\]\)/);
+  assert.match(page, /offer.is_high_sec.*'Y'/);
   for (const corporationId of [1000179, 1000180, 1000181, 1000182]) {
-    assert.match(page, new RegExp(String(corporationId)));
+    assert.match(policy, new RegExp(String(corporationId)));
   }
   assert.match(page, /calculated\.filter\(isHighSecOffer\)/);
   assert.match(page, /仅展示高安势力/);
   assert.match(page, /aria-pressed=\{showHighSecOnly\}/);
 });
 
-check("四个涂装兑换军团在展示、榜单和市场同步中永久排除", async () => {
-  const [policy, options, offers, rankings, history, orders, status, syncPage] = await Promise.all([
-    source("lib/data-policy.ts"),
-    source("app/api/data/options/route.ts"),
-    source("app/api/data/offers/route.ts"),
-    source("app/api/sync/rankings/route.ts"),
-    source("app/api/sync/history/route.ts"),
-    source("scripts/order-sync-daemon.mjs"),
-    source("app/api/sync/status/route.ts"),
-    source("app/sync/page.tsx"),
-  ]);
-  for (const corporationId of [1000283, 1000284, 1000285, 1000286]) assert.match(policy, new RegExp(String(corporationId)));
-  assert.match(policy, /涂装专属兑换军团/);
-  assert.match(options, /visibleCorporationSql/);
-  assert.match(offers, /isGloballyExcludedCorporation\(corporationId, corporation\.faction_id\)/);
-  assert.match(offers, /!isGloballyExcludedCorporation\(offer\.corporation_id, offer\.faction_id\)/);
-  assert.match(rankings, /!isGloballyExcludedCorporation\(Number\(offer\?\.corporation_id\)/);
-  assert.match(history, /visibleCorporationSql/);
-  assert.match(orders, /visibleCorporationSql/);
-  assert.match(status, /invalidItemCte[\s\S]*has_invalid_entity_source[\s\S]*has_visible_source/);
-  assert.match(syncPage, /显示无效数据/);
-  assert.match(syncPage, /排除势力与军团/);
-  assert.match(syncPage, /永久跳过市场查询的物品/);
-});
 
 check("组合优化同时排除材料和产出订单深度不足的方案", async () => {
   const page = await source("app/page.tsx");
@@ -152,6 +77,53 @@ check("军团收藏夹仅保存在浏览器本地并支持切换与取消", asyn
   assert.doesNotMatch(page, /fetch\([^\n]*favorite/i);
   assert.match(css, /\.favorite-cards\{[^}]*flex-wrap:wrap[^}]*height:94px[^}]*overflow-x:hidden;overflow-y:auto/);
   assert.match(css, /\.favorite-cards>div\{[^}]*width:max-content[^}]*height:44px/);
+});
+
+check("共享功能栏支持 LP、合同入口与本地固定状态", async () => {
+  const [layout, sidebar, contractPage, styles] = await Promise.all([
+    source("app/layout.tsx"), source("app/tool-sidebar.tsx"), source("app/contracts/page.tsx"), source("app/globals.css"),
+  ]);
+  assert.match(layout, /<ToolSidebar \/>/);
+  assert.match(sidebar, /LP 计算器/);
+  assert.match(sidebar, /合同工具/);
+  assert.match(sidebar, /eve-lp-calculator:tool-sidebar-pinned/);
+  assert.match(sidebar, /aria-pressed=\{pinned\}/);
+  assert.match(styles, /\.tool-sidebar:hover/);
+  assert.match(styles, /body\.tool-sidebar-pinned \.tool-workspace/);
+  assert.match(styles, /\.tool-sidebar\.mobile-open/);
+  assert.match(contractPage, /合同分析/);
+  assert.match(contractPage, /contract-analysis/);
+});
+
+check("合同清空按钮重置输入结果筛选和排序，并防止旧请求回填", async () => {
+  const page = await source("app/contracts/page.tsx");
+  assert.match(page, /className="contract-analyzer-actions"/);
+  assert.match(page, /onClick=\{clear\}>清空/);
+  assert.match(page, /analysisRequest\.current\?\.abort\(\)/);
+  assert.match(page, /setText\(""\); setAnalysis\(null\); setLoading\(false\); setActiveAlertState\(null\)/);
+  assert.match(page, /setSortState\(\{ key: "name", direction: "asc" \}\)/);
+  assert.match(page, /if \(controller\.signal\.aborted\) return/);
+  assert.match(page, /analysisRequest\.current === controller/);
+});
+
+check("合同分析固定使用晨曦市场并分别展示卖出、收购与加权估价", async () => {
+  const [route, page, core] = await Promise.all([source("app/api/data/contract-analysis/route.ts"), source("app/contracts/page.tsx"), source("lib/contract-analysis.ts")]);
+  assert.match(route, /MARKET_REGION_ID/);
+  assert.match(route, /contract_item_cache/);
+  assert.match(route, /market_order_book/);
+  assert.doesNotMatch(route, /fetchMarketOrders/);
+  assert.match(route, /market_daily/);
+  assert.doesNotMatch(route, /weightedEstimate/);
+  assert.match(route, /estimatePrice = historyPrice > 0 \? historyPrice : null/);
+  assert.match(page, /卖单价/);
+  assert.match(page, /卖单总价/);
+  assert.match(page, /收单价/);
+  assert.match(page, /收单总价/);
+  assert.match(page, /历史单价/);
+  assert.match(page, /历史总价/);
+  assert.match(core, /sellVolume/);
+  assert.match(core, /买Volume|buyVolume/);
+  assert.match(core, /Intl.NumberFormat\("en-US"/);
 });
 
 check("企业选择器点击外部收起且不再显示当前结果搜索框", async () => {
@@ -184,20 +156,6 @@ check("手机端使用独立卡片且桌面表格保持默认显示", async () =
   assert.match(css, /height:100dvh/);
 });
 
-check("增效剂蓝图默认过滤且可以手动显示", async () => {
-  const [page, route, worker, rankings] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts"), source("scripts/sync-worker.mjs"), source("app/api/sync/rankings/route.ts")]);
-  assert.match(route, /include_booster_blueprints/);
-  assert.match(route, /br\.blueprint_type_id IS NOT NULL/);
-  assert.match(route, /增效体/);
-  assert.match(route, /%booster%/);
-  assert.match(page, /showBoosterBlueprints/);
-  assert.match(page, /显示增效剂蓝图/);
-  assert.match(page, /隐藏增效剂蓝图/);
-  assert.match(worker, /include_booster_blueprints: "1"/);
-  assert.match(worker, /slice\(0, 100\)/);
-  assert.match(rankings, /visibleRows = rows\.filter[\s\S]*\.slice\(0, 100\)/);
-  assert.match(route, /filter\(offer => includeBoosterBlueprints \|\| !isBoosterBlueprint\(offer\)\)\.slice\(0, 100\)/);
-});
 
 check("首页榜单扩展为前一百并支持分页", async () => {
   const [page, route] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts")]);
@@ -255,20 +213,7 @@ check("没有独立徽标的古力突击队回退到古斯塔斯势力徽标", a
   assert.match(route, /corporations\/\$\{fallbackFactionId\}\/logo/);
 });
 
-check("历史同步跳过不可交易和不存在的物品", async () => {
-  const [history, esi] = await Promise.all([source("app/api/sync/history/route.ts"), source("lib/esi-server.ts")]);
-  assert.match(history, /if \(!isMarketUnavailable\(error\)\) throw error/);
-  assert.match(esi, /type not tradable on market/i);
-  assert.match(esi, /type not found/i);
-});
 
-check("历史同步每轮最多 50 条、使用 30 并发和 1 秒间隔", async () => {
-  const [history, worker] = await Promise.all([source("app/api/sync/history/route.ts"), source("scripts/sync-worker.mjs")]);
-  assert.match(history, /LIMIT 50/);
-  assert.match(history, /const HISTORY_CONCURRENCY = 30/);
-  assert.match(history, /concurrency: HISTORY_CONCURRENCY/);
-  assert.match(worker, /job\.kind === "history" \? 1000/);
-});
 
 check("市场订单使用独立按钮", async () => {
   const [page, esi, route] = await Promise.all([source("app/page.tsx"), source("lib/esi-server.ts"), source("app/api/data/market-orders/route.ts")]);
@@ -278,7 +223,8 @@ check("市场订单使用独立按钮", async () => {
   assert.match(page, /当前卖单 · 价格从低到高/);
   assert.doesNotMatch(esi, /\.slice\(0, 5\)/);
   assert.match(esi, /grouped\.set\(order\.price/);
-  assert.match(route, /FROM market_order_levels/);
+  assert.match(route, /FROM market_order_book/);
+  assert.match(route, /location_name/);
   assert.match(page, /\[10, 20, 50\]/);
 });
 
@@ -311,13 +257,6 @@ check("前端历史周期移除三日选项并为最近交易日标注实际日�
   assert.match(page, /title=\{recentDateHint\}/);
 });
 
-check("历史同步错过 00:30 后会补跑且冲突不会被误判成功", async () => {
-  const worker = await source("scripts/sync-worker.mjs");
-  assert.match(worker, /historyUpdatedDate !== today/);
-  assert.match(worker, /response\.status === 409/);
-  assert.doesNotMatch(worker, /response\.ok \|\| response\.status === 409/);
-  assert.match(worker, /60 秒后重新调度/);
-});
 
 check("桌面榜单使用高密度组合列和30天自然日均量", async () => {
   const [page, route, css] = await Promise.all([source("app/page.tsx"), source("app/api/data/offers/route.ts"), source("app/globals.css")]);
@@ -364,39 +303,17 @@ check("脑插可兑换套数只按 LP 计算并列出材料缺口", async () => 
   assert.match(page, /现有卖单/);
   assert.match(route, /sell_available_volume/);
   assert.match(page, /材料可能不足，请检查材料/);
-  assert.match(route, /item\.sell_price > 0 \? item\.sell_price : item\.expected_price/);
-  assert.doesNotMatch(route, /item\.buy_price > 0 \? item\.buy_price : item\.expected_price/);
-  assert.match(page, /无卖单 · 采用历史估值/);
-  assert.match(page, /无卖单及历史成交 · 不采用收单估值/);
+  assert.match(route, /item\.buy_price > 0 \? item\.buy_price : item\.expected_price/);
+  assert.doesNotMatch(route, /item\.sell_price > 0 \? item\.sell_price : item\.expected_price/);
+  assert.match(page, /无收单 · 采用历史估值/);
+  assert.match(page, /无收单及历史成交 · 不参与 LP 比例/);
   assert.match(page, /数据不完整（\$\{sellPricedCount\}\/\$\{set\.item_count\}）/);
-  assert.match(page, /仅作立即出售参考/);
+  assert.match(page, /LP 比例优先采用此价/);
   assert.match(route, /expected_price/);
   assert.match(route, /priceSource/);
   assert.match(page, /material-missing/);
 });
 
-check("脑插目录由全量同步生成且合同按增量明细签名匹配", async () => {
-  const [route, page, catalog, contracts, core] = await Promise.all([
-    source("app/api/data/contracts/route.ts"), source("app/page.tsx"), source("app/api/sync/catalog/route.ts"),
-    source("scripts/contract-sync-daemon.mjs"), source("scripts/contract-sync-core.mjs"),
-  ]);
-  assert.doesNotMatch(route, /INSERT INTO implant_catalog/);
-  assert.match(route, /sort\(\(a, b\) => a - b\)/);
-  assert.match(catalog, /rebuildImplantCatalog/);
-  assert.match(catalog, /DELETE FROM implant_catalog/);
-  assert.match(contracts, /fetchDirectory\(metrics\)/);
-  assert.match(contracts, /contract_item_cache/);
-  assert.match(contracts, /DELETE FROM contract_snapshots/);
-  assert.doesNotMatch(contracts, /contract\.volume >= 6/);
-  assert.match(core, /quantities\.size !== 6/);
-  assert.match(core, /setCounts\.size !== 1/);
-  assert.match(contracts, /unit_price: contract\.price \/ item\.set_count/);
-  assert.match(page, /公开合同价格/);
-  assert.match(page, /implant-item-materials/);
-  assert.match(page, /setRedemptionCost/);
-  assert.match(page, /implant-contract-ratio/);
-  assert.match(page, /contract\.unit_price - setRedemptionCost/);
-});
 
 check("蓝图展开材料区展示收益汇总并按需查询公开合同", async () => {
   const [page, css] = await Promise.all([source("app/page.tsx"), source("app/globals.css")]);
@@ -426,40 +343,8 @@ check("蓝图展开材料区展示收益汇总并按需查询公开合同", asyn
   assert.match(css, /\.blueprint-contract-list>div\{grid-template-columns:minmax\(0,1fr\) auto/);
 });
 
-check("合同地点使用国服吉他四卫星四名称", async () => {
-  const [route, daemon] = await Promise.all([source("app/api/data/contracts/route.ts"), source("scripts/contract-sync-daemon.mjs")]);
-  assert.match(route, /吉他 4 - 卫星 4 - 加达里海军组装车间/);
-  assert.match(daemon, /吉他 4 - 卫星 4 - 加达里海军组装车间/);
-});
 
-check("AK 兑换来源由统一无效数据策略排除并保留共享物品", async () => {
-  const [policy, options, offers, history, orders, status, catalog] = await Promise.all([
-    source("lib/data-policy.ts"), source("app/api/data/options/route.ts"), source("app/api/data/offers/route.ts"),
-    source("app/api/sync/history/route.ts"), source("scripts/order-sync-daemon.mjs"), source("app/api/sync/status/route.ts"),
-    source("app/api/sync/catalog/route.ts"),
-  ]);
-  assert.match(policy, /visibleOfferSql/);
-  assert.match(policy, /COALESCE\(\$\{alias\}\.ak_cost, 0\) = 0/);
-  assert.match(options, /visibleOfferSql/);
-  assert.match(offers, /const conditions: string\[\] = \[visibleOffer\]/);
-  assert.match(offers, /akOfferKeys/);
-  assert.match(history, /visibleOfferSql/);
-  assert.match(orders, /visibleOfferSql/);
-  assert.match(status, /has_ak_source/);
-  assert.match(status, /Analysis Kredits（AK）/);
-  assert.match(catalog, /COALESCE\(o\.ak_cost,0\)=0/);
-});
 
-check("目录和蓝图通过暂存表原子发布", async () => {
-  const [catalog, schema] = await Promise.all([source("app/api/sync/catalog/route.ts"), source("db/d1.ts")]);
-  assert.match(schema, /CREATE TABLE IF NOT EXISTS lp_offer_staging/);
-  assert.match(schema, /CREATE TABLE IF NOT EXISTS blueprint_recipe_staging/);
-  assert.match(catalog, /INSERT INTO lp_offer_staging/);
-  assert.match(catalog, /INSERT INTO lp_offers[\s\S]*SELECT corporation_id, offer_id[\s\S]*FROM lp_offer_staging/);
-  assert.match(catalog, /UPDATE corporations SET faction_id=\?, offers_synced_at/);
-  assert.match(catalog, /INSERT INTO blueprint_recipe_staging/);
-  assert.match(catalog, /INSERT OR REPLACE INTO blueprint_checks/);
-});
 
 check("前端取消过期请求并提示合同缓存已过期", async () => {
   const [page, css] = await Promise.all([source("app/page.tsx"), source("app/globals.css")]);
