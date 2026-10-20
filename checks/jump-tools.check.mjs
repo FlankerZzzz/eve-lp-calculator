@@ -176,7 +176,7 @@ test('clear-calculation button is separate from reset and only clears tool query
   assert.match(compass,/button.onclick=\(\)=>onView/);
   assert.match(compass,/clear.textContent='清除计算';clear.disabled=true/);
   assert.match(compass,/clear.onclick=\(\)=>onClearCalculation\?\.\(\)/);
-  assert.match(compass,/setCalculation\(active:boolean\)\{if\(clear\)clear.disabled=!active/);
+  assert.match(compass,/setCalculation\(active:boolean,label='清除计算'\)\{if\(clear\)\{clear.disabled=!active;clear.textContent=label/);
   assert.match(hook,/clearCalculations=useCallback\(\(\)=>\{setActive\(null\);setDistanceInput\(null\);setReachInput\(null\);setDirection\('asc'\);\},\[\]\)/);
   assert.doesNotMatch(hook,/\.reset\(|\.focus\(|\.zoom\(/);
   assert.match(page,/hasCalculation=\{hasCalculation\} onClearCalculation=\{clearAllCalculations\}/);

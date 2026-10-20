@@ -18,12 +18,12 @@ export function createMapCompass(onView:(view:keyof typeof MAP_VIEWS)=>void,dime
   const clear=onClearCalculation?document.createElement('button'):null;
   if(clear){
     clear.type='button';clear.textContent='清除计算';clear.disabled=true;
-    clear.title='清空起点、途经点、终点、旗舰路线及小工具计算，不改变当前视角';
+    clear.title='清空起点、途经点、终点、路线及小工具计算，不改变当前视角';
     clear.onclick=()=>onClearCalculation?.();buttons.appendChild(clear);
   }
   root.append(svg,label,buttons);
   const nodes=new Map<string,{group:SVGGElement;line:SVGLineElement;text:SVGTextElement}>();
-  return {element:root,setCalculation(active:boolean){if(clear)clear.disabled=!active;},update(camera:Camera,offset:number[]){
+  return {element:root,setCalculation(active:boolean,label='清除计算'){if(clear){clear.disabled=!active;clear.textContent=label;}},update(camera:Camera,offset:number[]){
     for(const d of compassDirections(camera.quaternion.toArray())){
       if(dimension==='2d'&&(d.name==='上'||d.name==='下'))continue;
       let node=nodes.get(d.name);

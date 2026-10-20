@@ -48,6 +48,7 @@ export default function NavigationPage() {
   const activeRoute=visibleRoutes.find(r=>r.mode===analysis)||visibleRoutes[0];
   const signature=JSON.stringify({points:points.map(p=>p.id),avoid});
   const dirty=!!bundle&&signature!==submitted;
+  const hasCalculation=points.length>2||points.some(p=>p.id!==null||p.text!=='')||!!bundle||loading;
   const showDetails=desktop===false;
   const choose=useCallback((s:StarSystem)=>{setMenu(null);setSelected(s);controls.current?.focus(s);},[]);
   const context=useCallback((s:StarSystem,p:{x:number;y:number})=>{setSelected(s);setMenu({system:s,...p});},[]);
@@ -75,6 +76,16 @@ export default function NavigationPage() {
   },[desktop,data,mapAttempt]);
   useEffect(()=>()=>{sequence.current++;activityAbort.current?.abort();routeAbort.current?.abort();},[]);
   useEffect(()=>{if(!menu)return;const close=()=>setMenu(null),key=(e:KeyboardEvent)=>{if(e.key==='Escape')close();};window.addEventListener('pointerdown',close);window.addEventListener('keydown',key);window.addEventListener('resize',close);window.addEventListener('blur',close);window.addEventListener('scroll',close,true);return()=>{window.removeEventListener('pointerdown',close);window.removeEventListener('keydown',key);window.removeEventListener('resize',close);window.removeEventListener('blur',close);window.removeEventListener('scroll',close,true);};},[menu]);
+
+  const clearNavigation=useCallback(()=>{
+    sequence.current++;
+    routeAbort.current?.abort();routeAbort.current=null;
+    activityAbort.current?.abort();activityAbort.current=null;
+    setPoints([{key:++keys.current,text:'',id:null},{key:++keys.current,text:'',id:null}]);
+    setBundle(null);setActivities(null);setSubmitted('');
+    setLoading(false);setLoadingActivity(false);setError('');setActivityError('');
+    setSelected(null);setMenu(null);setMapTarget(null);
+  },[]);
 
   function setPoint(s:StarSystem,role:'origin'|'destination'|'waypoint') {
     const point={key:role==='waypoint'?++keys.current:0,id:s.id,text:s.nameZh};
@@ -115,10 +126,10 @@ export default function NavigationPage() {
         {desktop&&<><div className="nav-panel-rule"/><label className="nav-setting">显示星门连接<input type="checkbox" checked={gateLines} onChange={e=>setPreferences({gateLines:e.target.checked})}/></label><p className="nav-help">左键拖动平移 · Shift＋左键旋转 · 滚轮缩放<br/>右键星系设置起点、终点或途经点；点击查看详情与屏蔽操作。</p></>}
       </aside>
       <div className="nav-workspace">
-        {(desktop===true||!!bundle)&&<div className="nav-analysis-toolbar"><div className="nav-map-toolbar-main">{desktop===true&&<MapDimensionControl value={dimension} onChange={setDimension}/>}</div><div>{bundle&&showDetails&&<button onClick={()=>void loadActivity([...new Set(bundle.routes.flatMap(r=>r.ids))])} disabled={loadingActivity}>{loadingActivity?'加载统计…':'刷新统计'}</button>}</div></div>}
+        {desktop!==null&&<div className="nav-analysis-toolbar"><div className="nav-map-toolbar-main">{desktop===true&&<MapDimensionControl value={dimension} onChange={setDimension}/>}</div><div>{desktop===false&&<button type="button" disabled={!hasCalculation} onClick={clearNavigation}>清除导航</button>}{bundle&&showDetails&&<button onClick={()=>void loadActivity([...new Set(bundle.routes.flatMap(r=>r.ids))])} disabled={loadingActivity}>{loadingActivity?'加载统计…':'刷新统计'}</button>}</div></div>}
         {desktop===true&&<div className="nav-map-stage">
           <MapSystemSearch systems={systems} disabled={!data} onLocate={system=>setMapTarget(system.id)}/>
-          {data?<Suspense fallback={<div className="nav-loading">正在初始化三维星图…</div>}><StarMap ref={controls} dimension={dimension} data={data} blockedIds={avoid.avoid} selected={selected} gateLines={gateLines} colorMode={colorMode} environment={environment} onSelect={choose} onContext={context} routes={visibleRoutes} focusRoutes={visibleRoutes.length>0} routeViewRequest={routeViewRequest} activity={activities?.systems||NO_ACTIVITY}/></Suspense>:<div className="nav-loading nav-load-error" role={mapError?'alert':'status'}><p>{mapError||'正在展开新伊甸星图…'}</p>{(mapError||mapAttempt>0)&&<button className="nav-small-button" disabled={mapBusy} onClick={()=>setMapAttempt(n=>n+1)}>{mapBusy?'正在重试…':'重试星图'}</button>}</div>}
+          {data?<Suspense fallback={<div className="nav-loading">正在初始化三维星图…</div>}><StarMap ref={controls} dimension={dimension} data={data} blockedIds={avoid.avoid} selected={selected} gateLines={gateLines} colorMode={colorMode} environment={environment} onSelect={choose} onContext={context} routes={visibleRoutes} focusRoutes={visibleRoutes.length>0} routeViewRequest={routeViewRequest} hasCalculation={hasCalculation} onClearCalculation={clearNavigation} clearCalculationLabel="清除导航" activity={activities?.systems||NO_ACTIVITY}/></Suspense>:<div className="nav-loading nav-load-error" role={mapError?'alert':'status'}><p>{mapError||'正在展开新伊甸星图…'}</p>{(mapError||mapAttempt>0)&&<button className="nav-small-button" disabled={mapBusy} onClick={()=>setMapAttempt(n=>n+1)}>{mapBusy?'正在重试…':'重试星图'}</button>}</div>}
           {selected&&!menu&&<SelectedSystemCard system={selected} blocked={avoid.avoid.includes(selected.id)} environment={environment} onClose={()=>setSelected(null)}>{pointButtons(selected)}<button className="nav-block-action" onClick={blockSelected}>{avoid.avoid.includes(selected.id)?'移出屏蔽列表':'加入屏蔽列表'}</button></SelectedSystemCard>}
         </div>}
         {desktop===true&&<MapColorBar mode={colorMode} onChange={setColorMode} environment={environment}/>}
