@@ -3,7 +3,9 @@ import sys
 import zipfile
 
 archive, member = sys.argv[1:]
-allowed = {"types.jsonl", "blueprints.jsonl", "_sde.jsonl", "factions.jsonl"}
+allowed = {"types.jsonl", "blueprints.jsonl", "_sde.jsonl", "factions.jsonl",
+           "mapSolarSystems.jsonl", "mapRegions.jsonl", "mapConstellations.jsonl", "mapStargates.jsonl",
+           "groups.jsonl", "typeDogma.jsonl", "dogmaAttributes.jsonl", "dogmaEffects.jsonl", "npcStations.jsonl"}
 if member not in allowed:
     raise ValueError("Unsupported SDE member")
 with zipfile.ZipFile(archive) as source:

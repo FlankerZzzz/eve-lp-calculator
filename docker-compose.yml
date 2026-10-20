@@ -44,6 +44,10 @@ services:
       V2_SQLITE_PATH: /v2/eve-v2.db
       V2_LOG_PATH: /v2/logs
       SYNC_ADMIN_TOKEN: ${SYNC_ADMIN_TOKEN:-}
+      JUMP_COMPUTE_WORKERS: ${JUMP_COMPUTE_WORKERS:-auto}
+      JUMP_COMPUTE_QUEUE: ${JUMP_COMPUTE_QUEUE:-8}
+      JUMP_COMPUTE_SOURCE_PENDING: ${JUMP_COMPUTE_SOURCE_PENDING:-6}
+      JUMP_PUBLIC_ORIGIN: ${JUMP_PUBLIC_ORIGIN:-}
     volumes:
       - ./docker-data/v2:/v2
     healthcheck:

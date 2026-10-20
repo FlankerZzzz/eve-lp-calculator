@@ -1,7 +1,7 @@
 import {getState,setState,transaction} from './database.mjs';
 import {matchesCron} from './cron.mjs';
 
-export const taskPriority=module=>({orders:0,contracts:1,rankings:2,items:3,catalog:4,history:5}[module]??6);
+export const taskPriority=module=>({orders:0,contracts:1,rankings:2,geography:2,items:3,catalog:4,history:5}[module]??6);
 export function nextQueuedTask(db) {
   return db.prepare("SELECT module FROM tasks WHERE status='queued'").all().sort((a,b)=>taskPriority(a.module)-taskPriority(b.module)).at(0);
 }

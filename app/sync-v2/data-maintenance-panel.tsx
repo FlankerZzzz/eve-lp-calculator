@@ -1,6 +1,6 @@
 "use client";
 import { useState } from 'react';
-const modules:Record<string,string>={items:'物品、蓝图及制造材料',catalog:'LP 兑换方案及需求材料',history:'历史成交',orders:'订单（仅导出）',contracts:'合同及明细（仅导出）',rankings:'排行榜缓存（仅导出）'};
+const modules:Record<string,string>={items:'物品、蓝图及制造材料',catalog:'LP 兑换方案及需求材料',history:'历史成交',orders:'订单（仅导出）',contracts:'合同及明细（仅导出）',rankings:'排行榜缓存（仅导出）',geography:'星系地理缓存（仅导出）'};
 type Preview={preview_id:string;summary:{insert:number;update:number;unchanged:number;protected:number};examples:{table:string;action:string;row:Record<string,unknown>}[]};
 export default function DataMaintenancePanel({token}:{token:string}) {
   const [module,setModule]=useState('items'),[typeId,setTypeId]=useState(''),[from,setFrom]=useState(''),[to,setTo]=useState(''),[file,setFile]=useState<File|null>(null),[preview,setPreview]=useState<Preview|null>(null),[protect,setProtect]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
@@ -8,7 +8,7 @@ export default function DataMaintenancePanel({token}:{token:string}) {
   async function download() {
     setBusy(true);setError('');
     try {
-      const params={module,type_id:typeId,from:module==='history'?from:'',to:module==='history'?to:''};
+      const params={module,type_id:module==='geography'?'':typeId,from:module==='history'?from:'',to:module==='history'?to:''};
       const data=await unpack(await fetch(`/api/v2/data?${new URLSearchParams(params)}`,{headers:{'x-sync-admin-token':token},cache:'no-store'}));
       const form=document.createElement('form');form.method='POST';form.action='/api/v2/data/export';form.target='_blank';form.rel='noopener';
       for(const [name,value] of Object.entries({...params,admin_token:token})){const input=document.createElement('input');input.type='hidden';input.name=name;input.value=value;form.appendChild(input);}document.body.appendChild(form);form.submit();form.remove();

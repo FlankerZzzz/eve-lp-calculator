@@ -12,8 +12,9 @@ export async function GET() {
   const db = open();
   try {
     const tasks = db.prepare('SELECT * FROM tasks').all();
+    const geography=db.prepare("SELECT kind,modified,fetched,attempted,error,CASE WHEN payload IS NULL THEN NULL ELSE json_array_length(payload) END AS records FROM navigation_cache WHERE kind NOT IN ('map','jump') ORDER BY kind").all();
     const worker = db.prepare("SELECT value FROM runtime_state WHERE key='worker'").get();
-    return Response.json({ database: 'v2', timezone: 'Asia/Shanghai', worker, tasks: tasks.map(task => ({ ...task, next_run: task.automatic && task.cron ? nextCron(String(task.cron)) : null })) });
+    return Response.json({ database: 'v2', timezone: 'Asia/Shanghai', worker, tasks: tasks.map(task => ({ ...task, ...(task.module==='geography'?{feeds:geography}:{}), next_run: task.automatic && task.cron ? nextCron(String(task.cron)) : null })) });
   } finally { db.close(); }
 }
 export async function POST(request: Request) {

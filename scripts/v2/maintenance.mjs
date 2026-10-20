@@ -7,8 +7,8 @@ import { getLpPolicy, recomputeLpPolicy, lpFlagsForOffer, validateLpPolicy } fro
 export const MAINTENANCE_FORMAT='eve-v2-maintenance';
 export const MAX_IMPORT_BYTES=20*1024*1024;
 export const MAX_IMPORT_ROWS=10000;
-export const maintenanceModules={items:['items','recipes','recipe_materials'],catalog:['lp_exchange','lp_requirements'],history:['history'],orders:['orders'],contracts:['contracts','contract_items'],rankings:['ranking_cache']};
-const keys={items:['type_id'],recipes:['blueprint_id'],recipe_materials:['blueprint_id','material_type_id'],lp_exchange:['corporation_id','offer_id'],lp_requirements:['corporation_id','offer_id','material_type_id'],history:['type_id','date'],orders:['generation','order_id'],contracts:['contract_id'],contract_items:['contract_id','record_id'],ranking_cache:['list_kind','rank']};
+export const maintenanceModules={items:['items','recipes','recipe_materials'],catalog:['lp_exchange','lp_requirements'],history:['history'],orders:['orders'],contracts:['contracts','contract_items'],rankings:['ranking_cache'],geography:['navigation_cache','navigation_samples']};
+const keys={items:['type_id'],recipes:['blueprint_id'],recipe_materials:['blueprint_id','material_type_id'],lp_exchange:['corporation_id','offer_id'],lp_requirements:['corporation_id','offer_id','material_type_id'],history:['type_id','date'],orders:['generation','order_id'],contracts:['contract_id'],contract_items:['contract_id','record_id'],ranking_cache:['list_kind','rank'],navigation_cache:['kind'],navigation_samples:['kind','window_end']};
 const active="status IN ('running','queued','pause_requested')";
 const digest=value=>createHash('sha256').update(JSON.stringify(value??null)).digest('hex');
 const rowKey=(table,row)=>keys[table].map(key=>row[key]).join(':');
@@ -19,6 +19,7 @@ export function exportFilter(db,module,{type_id='',from='',to=''}={}) {
   if(!Object.hasOwn(maintenanceModules,module))throw new Error('导出模块无效');
   const id=type_id===''?null:Number(type_id);
   if(id!==null&&(!Number.isSafeInteger(id)||id<1))throw new Error('物品 ID 无效');
+  if(id!==null&&module==='geography')throw new Error('地理缓存按完整星系批次导出，不支持物品 ID 筛选');
   if((from&&!validDate(from))||(to&&!validDate(to))||(from&&to&&from>to))throw new Error('日期范围无效');
   if((from||to)&&module!=='history')throw new Error('日期筛选只适用于历史成交');
   return maintenanceModules[module].map(table=>{

@@ -1,0 +1,11 @@
+export type SystemInfo={id:number;nameZh:string;nameEn:string;regionId:number;regionName:string;security:number;npcStationCount?:number;searchPinyin?:string;searchInitials?:string};
+export type Mode='secure'|'shortest'|'insecure';
+export type RouteResult={mode:Mode;label:string;ids:number[];legs:{from:number;to:number;jumps:number}[];jumps:number;bands?:{high:number;low:number;null:number};error:string|null};
+export type RouteBundle={routes:RouteResult[];systems:(SystemInfo&{x:number;y:number;z:number})[];elapsedMs:number;calculatedAt:string;incursionsModified:string|null};
+export type Activity={jumps:number|null;ships:number|null;pods:number|null;npcs:number|null};
+export type FeedMeta={modified:string|null;fetched:string|null;fresh_until?:string|null;stale:boolean;error:string|null};
+export type Activities={systems:Record<number,Activity>;jumps:FeedMeta;kills:FeedMeta};
+export type LocalAvoid={avoid:number[];avoidList:boolean;avoidIncursions:boolean};
+export const MODE_NAMES:Record<Mode,string>={secure:'高安优先',shortest:'最近优先',insecure:'低安优先'};
+export const MODE_COLORS:Record<Mode,string>={secure:'#78efc7',shortest:'#76baff',insecure:'#ffbc73'};
+export const EMPTY_AVOID:LocalAvoid={avoid:[],avoidList:true,avoidIncursions:false};

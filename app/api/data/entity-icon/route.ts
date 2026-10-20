@@ -40,7 +40,7 @@ export async function GET(request: Request) {
   const fallbackFactionId = Number(url.searchParams.get("fallback_faction_id") || 0);
   const requestedSize = Number(url.searchParams.get("size") || 32);
   const size = ALLOWED_SIZES.has(requestedSize) ? requestedSize : 32;
-  if ((kind !== "faction" && kind !== "corporation") || !Number.isSafeInteger(entityId) || entityId <= 0) {
+  if (!["faction", "corporation", "alliance", "player-corporation"].includes(kind || "") || !Number.isSafeInteger(entityId) || entityId <= 0) {
     return imageResponse(fallbackSvg(size), "image/svg+xml; charset=utf-8", "fallback");
   }
 
@@ -71,7 +71,11 @@ export async function GET(request: Request) {
   try {
     let fetched: { body: Buffer; contentType: string };
     let networkSource: string;
-    if (kind === "faction") {
+    if (kind === "alliance" || kind === "player-corporation") {
+      // Player identities are shard-specific: never substitute a TQ logo for a Serenity ID.
+      networkSource = "network-cn";
+      fetched = await requestImage(`${SERENITY_IMAGE_BASE.replace(/\/$/, "")}/${kind === "alliance" ? "Alliance" : "Corporation"}/${entityId}_${size}.png`);
+    } else if (kind === "faction") {
       networkSource = "network-intl";
       try {
         fetched = await requestImage(`${IMAGE_BASE.replace(/\/$/, "")}/corporations/${entityId}/logo?size=${size}`);

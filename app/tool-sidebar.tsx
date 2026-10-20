@@ -9,6 +9,7 @@ const PIN_STORAGE_KEY = "eve-lp-calculator:tool-sidebar-pinned";
 const tools = [
   { href: "/", label: "LP 计算器", description: "兑换收益与组合分析", icon: "LP" },
   { href: "/contracts", label: "合同工具", description: "公开合同检索与分析", icon: "CT" },
+  { href: "/navigation", label: "星际导航", description: "三维星图与星系探索", icon: "NV" },
 ] as const;
 
 export default function ToolSidebar() {
@@ -63,7 +64,7 @@ export default function ToolSidebar() {
           <span><b>{tool.label}</b><small>{tool.description}</small></span>
         </Link>)}
       </nav>
-      <div className="tool-sidebar-foot"><span>02</span><small>TOOLS ONLINE</small></div>
+      <div className="tool-sidebar-foot"><span>{String(tools.length).padStart(2, "0")}</span><small>TOOLS ONLINE</small></div>
     </aside>
   </>;
 }

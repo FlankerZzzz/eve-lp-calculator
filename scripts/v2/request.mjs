@@ -63,7 +63,7 @@ export class RequestPool {
             error.httpStatus=response.status;error.responseBytes=Buffer.byteLength(text);error.emptyResponse=!text.trim();throw error;
           }
           log?.payload('response',data);
-          return {data,pages:Number(response.headers.get('x-pages')||1)};
+          return {data,pages:Number(response.headers.get('x-pages')||1),modified:response.headers.get('last-modified'),expires:response.headers.get('expires')};
         },signal);
         return result;
       } catch(error) {

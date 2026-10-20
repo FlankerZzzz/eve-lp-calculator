@@ -77,6 +77,15 @@ export function openV2(filename) {
     );
     CREATE INDEX IF NOT EXISTS history_date ON history(date,type_id);
     CREATE TABLE IF NOT EXISTS runtime_state (key TEXT PRIMARY KEY,value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS navigation_cache (
+      kind TEXT PRIMARY KEY, payload TEXT CHECK(payload IS NULL OR json_valid(payload)),
+      modified TEXT, fetched TEXT, attempted TEXT NOT NULL, error TEXT, version TEXT
+    );
+    CREATE TABLE IF NOT EXISTS navigation_samples (
+      kind TEXT NOT NULL, window_end TEXT NOT NULL, fetched TEXT NOT NULL,
+      payload TEXT NOT NULL CHECK(json_valid(payload)), PRIMARY KEY(kind,window_end)
+    );
+    CREATE INDEX IF NOT EXISTS navigation_samples_time ON navigation_samples(window_end);
     CREATE TABLE IF NOT EXISTS tasks (
       module TEXT PRIMARY KEY, automatic INTEGER NOT NULL DEFAULT 0, cron TEXT, status TEXT NOT NULL DEFAULT 'idle',
       run_id TEXT, processed INTEGER NOT NULL DEFAULT 0, remaining INTEGER NOT NULL DEFAULT 0,
@@ -94,7 +103,7 @@ export function openV2(filename) {
   }
   const now = new Date().toISOString();
   const insert = db.prepare('INSERT OR IGNORE INTO tasks(module,automatic,cron,updated_at) VALUES(?,?,?,?)');
-  for (const [module, automatic, cron] of [['items',0,null],['catalog',0,null],['orders',1,'*/15 * * * *'],['contracts',1,'*/30 * * * *'],['history',1,'30 0 * * *'],['rankings',1,'0 9,15,18,21 * * *']]) insert.run(module,automatic,cron,now);
+  for (const [module, automatic, cron] of [['items',0,null],['catalog',0,null],['orders',1,'*/15 * * * *'],['contracts',1,'*/30 * * * *'],['history',1,'30 0 * * *'],['rankings',1,'0 9,15,18,21 * * *'],['geography',1,'0 * * * *']]) insert.run(module,automatic,cron,now);
   migrateLpFlags(db);
   installViews(db);
   return db;

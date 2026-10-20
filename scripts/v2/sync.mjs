@@ -7,11 +7,12 @@ import { NPC_CORPORATION_FACTIONS } from '../../lib/npc-factions.ts';
 import { contractImplantSetsSql, lpFlagsForOffer } from './lp-policy.mjs';
 import { rebuildV2Rankings } from './rankings.mjs';
 import { readSdeTypeIndex } from './sde.mjs';
+import { syncGeography } from './geography.mjs';
 
 export class V2Sync {
   constructor({filename,logRoot,base='https://ali-esi.evepc.163.com',rate=5,concurrency=8,sdeArchive=process.env.V2_SDE_PATH||resolve(dirname(filename),'sde.zip')}={}) {
     this.db=openV2(filename);this.logRoot=logRoot;this.base=base.replace(/\/$/,'');this.pool=new RequestPool({rate,concurrency});this.controllers=new Map();
-    this.sdeArchive=sdeArchive;
+    this.sdeArchive=sdeArchive;this.filename=filename;
   }
   async request(path,params={},options={}) {
     const url=new URL(`${this.base}/latest${path}`);url.searchParams.set('datasource','serenity');
@@ -20,6 +21,7 @@ export class V2Sync {
   }
   progress(module,processed,remaining,phase) {this.db.prepare('UPDATE tasks SET processed=?,remaining=?,phase=?,updated_at=? WHERE module=?').run(processed,remaining,phase,new Date().toISOString(),module);}
   map(rows,callback,concurrency=this.pool.limit) {return mapPool(rows,callback,concurrency);}
+  async geography(runId,log) {await syncGeography(this,runId,log);}
   async rankings(runId,log) {
     const result=rebuildV2Rankings(this.db);
     this.progress('rankings',result.offers,0,'按维护标记重算全局 Top 100');
