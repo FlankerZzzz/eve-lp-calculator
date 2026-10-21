@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "晨曦服舰桥工具箱",
+  title: "晨曦工具箱",
   description: "晨曦服 LP 兑换、公开合同与市场数据分析工具箱。",
   icons: {
     icon: "/favicon.svg",

@@ -53,7 +53,7 @@ export default function ToolSidebar() {
     <aside id="tool-sidebar" className={`tool-sidebar${pinned ? " pinned" : ""}${mobileOpen ? " mobile-open" : ""}`} aria-label="功能导航">
       <div className="tool-sidebar-head">
         <span className="tool-sidebar-emblem" aria-hidden="true">✦</span>
-        <div><b>舰桥工具箱</b><small>BRIDGE TOOLS</small></div>
+        <div><b>晨曦工具箱</b><small>SERENITY TOOLBOX</small></div>
         <button type="button" className="tool-sidebar-pin" aria-label={pinned ? "取消固定功能栏" : "固定功能栏"} aria-pressed={pinned} title={pinned ? "取消固定" : "固定功能栏"} onClick={togglePinned}>
           <span aria-hidden="true">{pinned ? "◆" : "◇"}</span>
         </button>
