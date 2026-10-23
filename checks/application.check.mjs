@@ -52,11 +52,11 @@ check("首页两个榜单使用独立且可切换的排序状态", async () => {
 check("精选榜单支持仅展示可在高安执行任务的势力", async () => {
   const [page, policy] = await Promise.all([source("app/page.tsx"), source("lib/data-policy.ts")]);
   assert.match(policy, /HIGH_SEC_FACTION_IDS = new Set\(\[500001, 500002, 500003, 500004, 500007, 500008, 500015, 500016\]\)/);
-  assert.match(page, /offer.is_high_sec.*'Y'/);
+  assert.match(page, /params.set\("exclude", showHighSecOnly \? "1" : "0"\)/);
   for (const corporationId of [1000179, 1000180, 1000181, 1000182]) {
     assert.match(policy, new RegExp(String(corporationId)));
   }
-  assert.match(page, /calculated\.filter\(isHighSecOffer\)/);
+  assert.doesNotMatch(page, /calculated\.filter\(isHighSecOffer\)/);
   assert.match(page, /仅展示高安势力/);
   assert.match(page, /aria-pressed=\{showHighSecOnly\}/);
 });

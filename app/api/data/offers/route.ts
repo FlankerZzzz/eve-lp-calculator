@@ -51,6 +51,9 @@ export async function GET(request: Request) {
   const db = await ensureSchema();
   const { corporation: visibleCorporation, offer: visibleOffer } = businessLpVisibility(true);
   const url = new URL(request.url);
+  const excludeRaw = url.searchParams.get("exclude");
+  if (excludeRaw !== null && excludeRaw !== "0" && excludeRaw !== "1") return Response.json({ error: "exclude 只能为 0 或 1" }, { status: 400 });
+  const exclude = excludeRaw === "1";
   const daysRaw = finiteNumber(url.searchParams.get("days"), 30);
   const taxRaw = finiteNumber(url.searchParams.get("tax"), 3);
   const factionId = finiteNumber(url.searchParams.get("faction_id"), 0);
@@ -305,10 +308,11 @@ export async function GET(request: Request) {
     return Response.json({ view: "detail", offers: await hydrate(offers, materials), total, page, pageSize: requestedSize === "all" ? "all" : pageSize, pages: requestedSize === "all" ? 1 : Math.max(1, Math.ceil(total / pageSize)), days, historyLatestDate: latestHistoryDate, implant_sets: implantSets });
   }
 
-  const snapshots = (await db.prepare("SELECT list_kind, rank, snapshot_date, calculated_at, payload FROM ranking_snapshots WHERE rank <= 100 ORDER BY list_kind, rank").all<{ list_kind: string; rank: number; snapshot_date: string; calculated_at: string; payload: string }>()).results;
+  const suffix = exclude ? "_exclude" : "";
+  const snapshots = (await db.prepare("SELECT list_kind, rank, snapshot_date, calculated_at, payload FROM ranking_snapshots WHERE list_kind IN (?,?) AND rank <= 100 ORDER BY list_kind, rank").bind(`popular${suffix}`, `highRatio${suffix}`).all<{ list_kind: string; rank: number; snapshot_date: string; calculated_at: string; payload: string }>()).results;
   const maintainedFlags = new Map((await db.prepare("SELECT corporation_id,offer_id,is_high_sec,is_blocked FROM lp_offers").all<{ corporation_id: number; offer_id: number; is_high_sec: 'Y' | 'N'; is_blocked: 'Y' | 'N' }>()).results.map(row => [`${row.corporation_id}:${row.offer_id}`, row]));
   const isBoosterBlueprint = (offer: OfferRow) => Boolean(offer.is_blueprint) && /增效体|增效剂|booster/i.test(`${offer.item_name || ""} ${offer.product_name || ""}`);
-  const parse = (kind: string) => snapshots.filter(row => row.list_kind === kind).map(row => JSON.parse(row.payload) as OfferRow & { materials?: MaterialRow[] }).filter(offer => maintainedFlags.get(`${offer.corporation_id}:${offer.offer_id}`)?.is_blocked === 'N')
+  const parse = (kind: string) => snapshots.filter(row => row.list_kind === `${kind}${suffix}`).map(row => JSON.parse(row.payload) as OfferRow & { materials?: MaterialRow[] }).filter(offer => { const flags = maintainedFlags.get(`${offer.corporation_id}:${offer.offer_id}`); return flags?.is_blocked === 'N' && (!exclude || flags.is_high_sec === 'Y'); })
     .map(offer => ({ ...offer, is_high_sec: maintainedFlags.get(`${offer.corporation_id}:${offer.offer_id}`)!.is_high_sec, is_blocked: 'N' as const }))
     .filter(offer => includeBoosterBlueprints || !isBoosterBlueprint(offer)).slice(0, 100);
   const hydrateSnapshot = async (offers: (OfferRow & { materials?: MaterialRow[] })[]) => {
@@ -320,6 +324,8 @@ export async function GET(request: Request) {
   return Response.json({
     popular,
     highRatio,
+    exclude,
+    rankingScope: exclude ? "highSec" : "all",
     days,
     historyLatestDate: latestHistoryDate,
     snapshotDate: snapshots[0]?.snapshot_date ?? null,

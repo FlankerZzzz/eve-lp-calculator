@@ -123,6 +123,10 @@ check('V2 榜单写入按标记去重并补位，保留全局非高安，不破�
   db.prepare("UPDATE tasks SET last_success='fixture' WHERE module IN ('catalog','orders','history')").run();
   for(const type of [1,2,3]){db.prepare('INSERT INTO quote_cache VALUES(?,?,?,?,?,?)').run(type,10,12,100,100,'fixture');db.prepare('INSERT INTO history VALUES(?,?,?,?,?,?,?,?)').run(type,'2026-10-09',10,12,9,300,1,'N');}
   const result=rebuildV2Rankings(db);assert.equal(result.popular,2);assert.equal(result.highRatio,2);
+  assert.equal(result.popular_exclude,1);assert.equal(result.highRatio_exclude,1);
+  assert.equal(result.scopes.all.exclude,false);assert.equal(result.scopes.highSec.exclude,true);
+  const variants=db.prepare("SELECT list_kind,rank,payload FROM ranking_cache WHERE list_kind LIKE '%_exclude'").all();
+  assert.equal(variants.length,2);assert.ok(variants.every(row=>row.rank===1&&JSON.parse(row.payload).is_high_sec==='Y'));
   const rows=db.prepare("SELECT payload FROM ranking_cache WHERE list_kind='highRatio'").all().map(row=>JSON.parse(row.payload));
   assert.equal(rows.length,2);assert.ok(rows.some(row=>row.is_high_sec==='N'));assert.ok(rows.every(row=>row.is_blocked==='N'));assert.equal(rows.filter(row=>row.type_id===1).length,1);
   updateLpFlags(db,1,1,{is_blocked:'Y'});rebuildV2Rankings(db);
@@ -171,6 +175,18 @@ check('V2 实际 API 查询、详情、旧榜单和维护读写保持屏蔽一�
   const snapshot={corporation_id:1,offer_id:7,type_id:7,quantity:1,revenue_quantity:1,is_high_sec:'N',buy_price:0,materials:[]};
   for(const [rank,row] of [[1,{...snapshot,offer_id:1}],[2,snapshot]])db.prepare('INSERT INTO ranking_cache VALUES(?,?,?,?,?)').run('popular',rank,'fixture','fixture',JSON.stringify(row));
   const ranking=await (await offers.GET(request('/api/data/offers'))).json();assert.deepEqual(ranking.popular.map(r=>r.offer_id),[7]);assert.equal(ranking.popular[0].is_high_sec,'Y');
+  assert.equal(ranking.exclude,false);assert.equal(ranking.rankingScope,'all');
+  const emptyExclude=await (await offers.GET(request('/api/data/offers?exclude=1'))).json();
+  assert.equal(emptyExclude.exclude,true);assert.deepEqual(emptyExclude.popular,[]);assert.equal(emptyExclude.calculatedAt,null);
+  for(const kind of ['popular_exclude','highRatio_exclude'])db.prepare('INSERT INTO ranking_cache VALUES(?,?,?,?,?)').run(kind,1,'excluded-fixture','excluded-time',JSON.stringify(snapshot));
+  const excluded=await (await offers.GET(request('/api/data/offers?exclude=1'))).json();
+  assert.equal(excluded.exclude,true);assert.equal(excluded.rankingScope,'highSec');assert.equal(excluded.calculatedAt,'excluded-time');
+  assert.deepEqual(excluded.popular.map(r=>r.offer_id),[7]);assert.deepEqual(excluded.highRatio.map(r=>r.offer_id),[7]);
+  updateLpFlags(db,1,7,{is_high_sec:'N'});
+  assert.equal((await (await offers.GET(request('/api/data/offers?exclude=1'))).json()).popular.length,0);
+  assert.equal((await (await offers.GET(request('/api/data/offers?exclude=0'))).json()).popular.length,1);
+  updateLpFlags(db,1,7,{is_high_sec:'Y'});
+  assert.equal((await offers.GET(request('/api/data/offers?exclude=invalid'))).status,400);
   db.prepare('INSERT INTO implant_sets VALUES(?,?,?,?,?,?,?,?,?)').run('set','套装','Set',1,2,3,4,5,6);db.prepare('INSERT INTO corporation_sets VALUES(?,?,?)').run(3,500001,'set');
   for(let id=1;id<=6;id++)offer(3,id,500001,0,id);
   assert.equal((await contracts.GET(request('/api/data/contracts?type_ids=1,2,3,4,5,6'))).status,200);

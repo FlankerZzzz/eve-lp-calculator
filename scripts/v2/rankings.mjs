@@ -12,7 +12,7 @@ function execution(levels,quantity,fallback) {
   const price=filled>0?value/filled:0;
   return {price:price||fallback,coverage:price?Math.min(1,filled/quantity):fallback>0?1:0};
 }
-// Same signature, tax and depth rules as the legacy ranking worker. No high-sec prefilter.
+// Shared tax and depth rules for both independently ranked scopes.
 export function calculateRankingOffer(offer) {
   const materialCost=offer.materials.reduce((n,m)=>n+m.quantity*(m.sell_execution_price||m.sell_price||0),0);
   const materialsCovered=offer.materials.every(m=>m.quantity<=0||(m.sell_execution_coverage??(m.sell_price>0?1:0))>=1);
@@ -35,6 +35,17 @@ export function selectRankingRows(offers,field) {
     if(!previous||offer[field]>previous[field])unique.set(signature,offer);
   }
   return [...unique.values()].sort((a,b)=>b[field]-a[field]).slice(0,100);
+}
+export function selectRankingLists(offers) {
+  // Filter BEFORE deduplication and Top 100 selection. A global representative
+  // may be non-high-sec even when the same exchange exists in high-sec space.
+  const highSec=offers.filter(offer=>offer.is_high_sec==='Y');
+  return {
+    popular:selectRankingRows(offers,'daily_volume'),
+    highRatio:selectRankingRows(offers,'lp_ratio'),
+    popular_exclude:selectRankingRows(highSec,'daily_volume'),
+    highRatio_exclude:selectRankingRows(highSec,'lp_ratio'),
+  };
 }
 export function rebuildV2Rankings(db) {
   // Do not replace migrated snapshots with partial initial market data.
@@ -70,12 +81,12 @@ export function rebuildV2Rankings(db) {
     });
     // Defensive writer filter, in addition to the source query and public snapshot reader.
     const visible=filterLpRankingRows(offers,flags);
-    const lists={popular:selectRankingRows(visible,'daily_volume'),highRatio:selectRankingRows(visible,'lp_ratio')};
+    const lists=selectRankingLists(visible);
     const now=new Date().toISOString(),date=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
     db.exec('DELETE FROM ranking_cache');
     const insert=db.prepare('INSERT INTO ranking_cache VALUES(?,?,?,?,?)');
     for(const [kind,rows] of Object.entries(lists))rows.forEach((row,index)=>insert.run(kind,index+1,date,now,JSON.stringify(row)));
-    const result={offers:visible.length,popular:lists.popular.length,highRatio:lists.highRatio.length,policy_revision:revision,history_complete:Boolean(db.prepare("SELECT last_success FROM tasks WHERE module='history'").get()?.last_success)};
+    const result={offers:visible.length,...Object.fromEntries(Object.entries(lists).map(([kind,rows])=>[kind,rows.length])),scopes:{all:{exclude:false,popular:lists.popular.length,highRatio:lists.highRatio.length},highSec:{exclude:true,popular:lists.popular_exclude.length,highRatio:lists.highRatio_exclude.length}},policy_revision:revision,history_complete:Boolean(db.prepare("SELECT last_success FROM tasks WHERE module='history'").get()?.last_success)};
     setState(db,'rankings',{...result,calculated_at:now});return result;
   });
 }

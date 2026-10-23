@@ -1,7 +1,6 @@
 "use client";
 
 import { type Dispatch, type ReactNode, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { HIGH_SEC_FACTION_IDS, HIGH_SEC_EXCLUDED_CORPORATION_IDS } from '../lib/data-policy';
 import { contractPayment } from '../lib/contract-analysis';
 
 type SortKey = "lp_cost" | "isk_cost" | "materialCost" | "sell_price" | "buy_price" | "maxProfit" | "minProfit" | "lpRatio" | "volume";
@@ -57,17 +56,10 @@ function implantMaterialRequirements(set: ImplantSet, setCount: number): Implant
   return [...totals.values()].map(material => ({ ...material, missing: Math.max(0, material.required - material.available) }));
 }
 const MAX_CALCULATION_LP = 99_990_000;
-const APP_VERSION = "V2.1.2";
+const APP_VERSION = "V2.1.3";
 const LP_STORAGE_KEY = "eve-lp-calculator:lp";
 const OPTIMIZATION_STORAGE_KEY = "eve-lp-calculator:optimization";
 const FAVORITE_CORPORATIONS_STORAGE_KEY = "eve-lp-calculator:favorite-corporations";
-
-function isHighSecOffer(offer: StoredOffer) {
-  if (offer.is_high_sec !== undefined) return offer.is_high_sec === 'Y';
-  return offer.faction_id !== null
-    && HIGH_SEC_FACTION_IDS.has(offer.faction_id)
-    && !HIGH_SEC_EXCLUDED_CORPORATION_IDS.has(offer.corporation_id);
-}
 
 async function copyText(text: string) {
   if (window.isSecureContext && navigator.clipboard?.writeText) {
@@ -207,6 +199,8 @@ export default function Home() {
   const [editingFavorites, setEditingFavorites] = useState(false);
   const corporationPickerRef = useRef<HTMLDivElement | null>(null);
   const blueprintContractControllersRef = useRef(new Map<number, AbortController>());
+  const offersRequestRef = useRef(0);
+  const optionsRequestRef = useRef<Promise<{ factions: FactionOption[]; corporations: CorporationOption[]; counts: Counts }> | null>(null);
   const loadedBlueprintContractTypesRef = useRef(new Set<number>());
   useEffect(() => {
     try {
@@ -281,20 +275,30 @@ export default function Home() {
       .finally(() => { blueprintContractControllersRef.current.delete(typeId); });
   }, []);
 
-  const loadOptions = useCallback(async () => {
-    const response = await fetch("/api/data/options", { cache: "no-store" });
-    if (!response.ok) throw new Error("无法读取数据库选项");
-    const data = await response.json() as { factions: FactionOption[]; corporations: CorporationOption[]; counts: Counts };
-    setFactions(data.factions);
-    setCorporations(data.corporations);
-    setDatabaseState("ONLINE");
+  const loadOptions = useCallback(() => {
+    // Bootstrap and connectivity confirmation share one request, not a polling loop.
+    if (!optionsRequestRef.current) {
+      optionsRequestRef.current = (async () => {
+        const response = await fetch("/api/data/options", { cache: "no-store" });
+        if (!response.ok) throw new Error("无法读取数据库选项");
+        const data = await response.json() as { factions: FactionOption[]; corporations: CorporationOption[]; counts: Counts };
+        if (!Array.isArray(data.factions) || !Array.isArray(data.corporations)) throw new Error("数据库选项格式错误");
+        return data;
+      })().finally(() => { optionsRequestRef.current = null; });
+    }
+    return optionsRequestRef.current;
   }, []);
 
   const loadOffers = useCallback(async (signal?: AbortSignal) => {
+    const requestId = ++offersRequestRef.current;
+    const isCurrent = () => !signal?.aborted && requestId === offersRequestRef.current;
+    if (!isCurrent()) return;
     setLoading(true);
+    if (!corporationId) { setPopularOffers([]); setHighRatioOffers([]); }
     try {
       const params = new URLSearchParams({ days: String(windowDays), tax: String(tax), price_mode: "卖价" });
       if (showBoosterBlueprints) params.set("include_booster_blueprints", "1");
+      if (!corporationId) params.set("exclude", showHighSecOnly ? "1" : "0");
       if (factionId) params.set("faction_id", String(factionId));
       if (corporationId) {
         params.set("corporation_id", String(corporationId));
@@ -307,28 +311,53 @@ export default function Home() {
       if (!response.ok) throw new Error("无法读取兑换数据");
       if (corporationId) {
         const data = await response.json() as { offers: StoredOffer[]; total: number; pages: number; implant_sets?: ImplantSet[] };
+        if (!isCurrent()) return;
+        if (!Array.isArray(data.offers) || !Number.isFinite(data.total)) throw new Error("兑换数据格式错误");
         setDetailOffers(data.offers);
         setImplantSets(data.implant_sets || []);
         setStatus(`企业详情：已载入全部 ${data.total.toLocaleString()} 条兑换方案`);
       } else {
         const data = await response.json() as { popular: StoredOffer[]; highRatio: StoredOffer[]; calculatedAt?: string | null };
+        if (!isCurrent()) return;
+        if (!Array.isArray(data.popular) || !Array.isArray(data.highRatio)) throw new Error("兑换数据格式错误");
         setPopularOffers(data.popular);
         setHighRatioOffers(data.highRatio);
         const uniqueCount = new Set([...data.popular, ...data.highRatio].map(offer => `${offer.corporation_id}:${offer.offer_id}`)).size;
-        setStatus(uniqueCount ? `首页已载入 ${uniqueCount} 条固定榜单 · ${data.calculatedAt ? new Date(data.calculatedAt).toLocaleString("zh-CN") : "等待重算"}` : "尚无榜单快照，请到 SYNC 页面手动重算");
+        setStatus(uniqueCount ? `首页已载入 ${uniqueCount} 条${showHighSecOnly ? "高安" : "全部有效方案"}独立榜单 · ${data.calculatedAt ? new Date(data.calculatedAt).toLocaleString("zh-CN") : "等待重算"}` : "尚无对应榜单快照，请到 SYNC 页面手动重算");
       }
+      setDatabaseState("ONLINE");
     } catch (error) {
-      if (signal?.aborted) return;
-      setDatabaseState("OFFLINE");
+      if (!isCurrent()) return;
       setStatus(error instanceof Error ? error.message : "读取数据库失败");
       setPopularOffers([]);
       setHighRatioOffers([]);
       setDetailOffers([]);
       setImplantSets([]);
-    } finally { if (!signal?.aborted) setLoading(false); }
-  }, [corporationId, factionId, showBoosterBlueprints, tax, windowDays]);
+      // A failed offers endpoint does not by itself mean the database is offline.
+      try {
+        await loadOptions();
+        if (isCurrent()) setDatabaseState("ONLINE");
+      } catch {
+        if (isCurrent()) setDatabaseState("OFFLINE");
+      }
+    } finally { if (isCurrent()) setLoading(false); }
+  }, [corporationId, factionId, showBoosterBlueprints, showHighSecOnly, tax, windowDays, loadOptions]);
 
-  useEffect(() => { loadOptions().catch(error => { setDatabaseState("OFFLINE"); setStatus(error instanceof Error ? error.message : "读取数据库失败"); }); }, [loadOptions]);
+  useEffect(() => {
+    let cancelled = false;
+    const requestId = offersRequestRef.current;
+    void loadOptions().then(data => {
+      if (cancelled) return;
+      setFactions(data.factions);
+      setCorporations(data.corporations);
+      if (requestId === offersRequestRef.current) setDatabaseState("ONLINE");
+    }).catch(error => {
+      if (cancelled || requestId !== offersRequestRef.current) return;
+      setDatabaseState("OFFLINE");
+      setStatus(error instanceof Error ? error.message : "读取数据库失败");
+    });
+    return () => { cancelled = true; };
+  }, [loadOptions]);
   useEffect(() => {
     const controller = new AbortController();
     void loadOffers(controller.signal);
@@ -522,14 +551,8 @@ export default function Home() {
   }, [calculate, corporationId, lp, showBoosterBlueprints, tax, windowDays]);
 
   const detailCalculated = useMemo(() => calculate(detailOffers), [calculate, detailOffers]);
-  const popularCalculated = useMemo(() => {
-    const calculated = calculate(popularOffers);
-    return showHighSecOnly ? calculated.filter(isHighSecOffer) : calculated;
-  }, [calculate, popularOffers, showHighSecOnly]);
-  const ratioCalculated = useMemo(() => {
-    const calculated = calculate(highRatioOffers);
-    return showHighSecOnly ? calculated.filter(isHighSecOffer) : calculated;
-  }, [calculate, highRatioOffers, showHighSecOnly]);
+  const popularCalculated = useMemo(() => calculate(popularOffers), [calculate, popularOffers]);
+  const ratioCalculated = useMemo(() => calculate(highRatioOffers), [calculate, highRatioOffers]);
   const latestPublishedTradeDate = useMemo(() => [...detailOffers, ...popularOffers, ...highRatioOffers]
     .flatMap(offer => publishedVolumePoints(offer.daily_volumes ?? []).map(point => point.trade_date))
     .sort()

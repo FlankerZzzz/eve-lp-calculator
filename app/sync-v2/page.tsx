@@ -9,7 +9,7 @@ import './sync-v2.css';
 type Task = { module: string; automatic: number; cron: string | null; status: string; phase: string | null; processed: number; remaining: number; error: string | null; last_success: string | null; next_run: string | null; debug: number; feeds?:{kind:string;modified:string|null;fetched:string|null;error:string|null;records:number|null}[] };
 const feedNames:Record<string,string>={system_jumps:'过门统计',system_kills:'击毁统计',incursions:'萨沙入侵',sovereignty:'主权',sovereignty_names:'主权归属名称',industry:'工业系数'};
 const labels: Record<string,string> = { items:'物品主表', catalog:'势力 · 军团 · LP', orders:'伏尔戈订单', contracts:'公开合同', history:'历史成交', rankings:'排行榜',geography:'星系地理缓存' };
-const descriptions: Record<string,string> = { items:'物品信息与 SDE 查缺补漏', catalog:'势力、军团及 LP 兑换方案', orders:'伏尔戈星域全量市场订单', contracts:'公开合同目录及物品明细', history:'按物品补齐每日成交记录', rankings:'按现有规则重算全局 Top 100',geography:'过门、击毁、主权、入侵与工业系数 · 默认每小时 · 统计保留 72 小时' };
+const descriptions: Record<string,string> = { items:'物品信息与 SDE 查缺补漏', catalog:'势力、军团及 LP 兑换方案', orders:'伏尔戈星域全量市场订单', contracts:'公开合同目录及物品明细', history:'按物品补齐每日成交记录', rankings:'热销 / 价值榜 · 全部与仅高安（exclude）各自独立 Top 100',geography:'过门、击毁、主权、入侵与工业系数 · 默认每小时 · 统计保留 72 小时' };
 const statuses: Record<string,string> = { idle:'未开始', queued:'已排队', running:'运行中', pause_requested:'暂停中', paused:'已暂停', complete:'已完成', failed:'失败' };
 const formatTime = (value: string | null) => value ? new Date(value).toLocaleString('zh-CN') : '尚未完成';
 export default function V2SyncPage() {

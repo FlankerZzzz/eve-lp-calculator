@@ -24,7 +24,7 @@ export class V2Sync {
   async geography(runId,log) {await syncGeography(this,runId,log);}
   async rankings(runId,log) {
     const result=rebuildV2Rankings(this.db);
-    this.progress('rankings',result.offers,0,'按维护标记重算全局 Top 100');
+    this.progress('rankings',result.offers,0,'已重算热销 / 价值榜 · exclude 与非 exclude 四份 Top 100');
     log.info('ranking_policy',result);
   }
   async run(module,{resume=true}={}) {
